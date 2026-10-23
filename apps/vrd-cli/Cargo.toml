@@ -1,0 +1,26 @@
+[package]
+name = "vrd-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "vrd-cli"
+path = "src/main.rs"
+
+[dependencies]
+vrd-format.workspace = true
+vrd-model.workspace = true
+vrd-engine.workspace = true
+vrd-scene = { version = "0.1.0", path = "../../crates/scene" }
+vrd-render = { version = "0.1.0", path = "../../crates/render" }
+pollster = "1.0.1"
+png = "0.18.1"
+wgpu = { version = "27", default-features = false, features = ["wgsl", "dx12", "vulkan", "metal"] }
+
+[lints]
+workspace = true
+

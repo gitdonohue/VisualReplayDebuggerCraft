@@ -1,0 +1,16 @@
+[package]
+name = "vrd-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+vrd-format.workspace = true
+thiserror = "2.0.21"
+
+[lints]
+workspace = true
+

@@ -1,0 +1,19 @@
+[package]
+name = "vrd-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+vrd-model = { version = "0.1.0", path = "../model" }
+
+[dev-dependencies]
+vrd-format.workspace = true
+
+[lints]
+workspace = true
+
+

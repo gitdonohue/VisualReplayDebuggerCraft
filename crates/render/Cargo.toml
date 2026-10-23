@@ -1,0 +1,21 @@
+[package]
+name = "vrd-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+bytemuck = "1.25.2"
+vrd-scene.workspace = true
+wgpu = { version = "27", default-features = false, features = ["wgsl"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+pollster = "1.0.1"
+wgpu = { version = "27", default-features = false, features = ["wgsl", "dx12", "vulkan", "metal"] }
+

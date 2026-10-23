@@ -1,0 +1,25 @@
+[package]
+name = "vrd-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+eframe = { version = "0.33.3", default-features = false, features = ["wgpu", "default_fonts"] }
+egui = "0.33.3"
+vrd-ui-egui.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.106"
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4.79"
+web-sys = { version = "0.3.106", features = ["Window", "Location", "UrlSearchParams", "Response", "Request", "RequestInit"] }
+# WebGPU where the browser has it, WebGL2 otherwise.
+wgpu = { version = "27", default-features = false, features = ["webgpu", "webgl", "wgsl"] }
+
+[lints]
+workspace = true
+

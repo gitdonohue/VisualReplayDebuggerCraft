@@ -1,0 +1,51 @@
+name: Deploy web app
+
+# Builds apps/vrd-web with trunk and publishes it to GitHub Pages.
+# One-time setup: Settings > Pages > Build and deployment > Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  TRUNK_VERSION: v0.22.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install trunk
+        run: |
+          curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Build
+        working-directory: apps/vrd-web
+        run: trunk build --release --public-url "/${{ github.event.repository.name }}/"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/vrd-web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

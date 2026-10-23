@@ -20,6 +20,7 @@ tool) and `C:\Projects\solidcraft`.
 * `cargo run -p vrd -- testdata/sample.vrd`
 * `cargo run -p vrd-cli -- render testdata/sample.vrd --out out.png --frame 600` draws a frame headlessly. Use it to look at rendering changes. `info` and `entities` print what a capture contains.
 * `cd apps/vrd-web && trunk serve`, then open `/?url=sample.vrd`
+* The web app deploys to https://gitdonohue.github.io/VisualReplayDebuggerCraft/ from `.github/workflows/pages.yml` on every push to `develop` or `main` (Pages source must be "GitHub Actions"). To test the subpath build locally: `trunk serve --release --public-url /VisualReplayDebuggerCraft/`.
 
 ## Windows
 Rust must link with a complete MSVC toolchain. If `cargo` picks a Visual Studio install without `msvcrt.lib`,

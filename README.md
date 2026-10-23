@@ -14,6 +14,10 @@ Early. Working today: opening captures (including truncated ones), the entity tr
 entity properties over time, playback controls, and a 3D wgpu viewport (entity geometry, debug draws, paths,
 picking, follow-camera) that runs on desktop and in the browser. Still to come: graphs, timelines and an MCP server.
 
+## Try it
+
+**[Open the web version](https://gitdonohue.github.io/VisualReplayDebuggerCraft/?url=sample.vrd)** (a sample capture is loaded; drop your own `.vrd` onto the page to open it). It needs a browser with WebGPU or WebGL2.
+
 ## Run it
 
 ```

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use vrd_model::Replay;
 
 /// Characters that separate the levels of a parameter name: `Physics.Queries.Raycast` is depth 2.
-const SEPARATORS: [char; 3] = ['.', '\\', '/'];
+pub(crate) const SEPARATORS: [char; 3] = ['.', '\\', '/'];
 
 /// How deeply a parameter name is nested.
 pub fn depth(name: &str) -> usize {
@@ -128,6 +128,14 @@ impl Series {
     }
 }
 
+/// When an entity exists, in seconds: from its first frame to the end of its last. Anything it
+/// recorded outside that span is not shown.
+pub(crate) fn valid_range(replay: &Replay, entity: i32) -> Option<(f64, f64)> {
+    let (first, last) = replay.lifetime(entity)?;
+    let end = if last >= replay.last_frame() { replay.total_time() } else { replay.time_for_frame(last + 1) };
+    Some((replay.time_for_frame(first), end))
+}
+
 /// Every numeric series in a capture, grouped by entity.
 #[derive(Debug, Clone, Default)]
 pub struct GraphData {
@@ -139,11 +147,9 @@ impl GraphData {
     pub fn build(replay: &Replay) -> GraphData {
         let mut data = GraphData::default();
         for entity in replay.entities().filter(|e| !e.values.is_empty()) {
-            let Some((first, last)) = replay.lifetime(entity.id) else {
+            let Some(valid) = valid_range(replay, entity.id) else {
                 continue;
             };
-            let end = if last >= replay.last_frame() { replay.total_time() } else { replay.time_for_frame(last + 1) };
-            let valid = (replay.time_for_frame(first), end);
             let list: Vec<Series> = entity
                 .values
                 .iter()

@@ -10,6 +10,7 @@ use vrd_scene::{
 };
 
 use crate::theme::text_color;
+use crate::widgets::category_menu;
 
 const FOLLOW_FOV: f32 = 60.0;
 const ORBIT_FOV: f32 = 45.0;
@@ -187,6 +188,7 @@ impl Viewport {
                     "categories",
                     replay.draw_categories().iter().map(|c| (c.as_str(), c)),
                     &mut o.hidden_draw_categories,
+                    "This capture has no draw categories.",
                 )
             });
             ui.menu_button("Draw colors", |ui| {
@@ -466,40 +468,4 @@ fn to_glam(v: Vec2) -> glam::Vec2 {
 
 fn wgpu_filter() -> vrd_render::wgpu::FilterMode {
     vrd_render::wgpu::FilterMode::Linear
-}
-
-/// A checkbox list of named items that can be hidden, with All/None buttons.
-fn category_menu<'a>(
-    ui: &mut egui::Ui,
-    id: &str,
-    items: impl Iterator<Item = (&'a str, &'a String)> + Clone,
-    hidden: &mut std::collections::BTreeSet<String>,
-) {
-    ui.horizontal(|ui| {
-        if ui.small_button("All").clicked() {
-            hidden.clear();
-        }
-        if ui.small_button("None").clicked() {
-            hidden.extend(items.clone().map(|(_, k)| k.clone()));
-        }
-    });
-    ui.separator();
-    egui::ScrollArea::vertical().id_salt(id).max_height(320.0).show(ui, |ui| {
-        let mut any = false;
-        for (label, key) in items {
-            any = true;
-            let mut shown = !hidden.contains(key);
-            let text = if label.is_empty() { "(none)" } else { label };
-            if ui.checkbox(&mut shown, text).changed() {
-                if shown {
-                    hidden.remove(key);
-                } else {
-                    hidden.insert(key.clone());
-                }
-            }
-        }
-        if !any {
-            ui.weak("This capture has no draw categories.");
-        }
-    });
 }

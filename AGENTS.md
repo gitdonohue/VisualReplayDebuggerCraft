@@ -8,10 +8,10 @@ tool) and `C:\Projects\solidcraft`.
 * `crates/format`: `.vrd` reader/writer. See `docs/format.md`. Must keep loading existing captures.
 * `crates/model`: `Replay`, the indexed view of a capture (entities, timelines, logs, draws, frame/time).
 * `crates/engine`: `Playback` (time, frame, speed, stepping) and `TimeWindow` (the zoomable span timeline views show). No UI code.
-* `crates/graph`: CPU side of the graphs (series, scales, band layout, per-pixel decimation, ticks). No UI code, fully unit tested.
+* `crates/graph`: CPU side of the time-based panels: graph series, scales, band layout, per-pixel decimation, ticks, and the parameter timelines (runs, levels, rows, busy blocks, event navigation). No UI code, fully unit tested.
 * `crates/scene`: CPU side of the 3D viewport (camera, tessellation, `build_frame`, picking). No GPU code, fully unit tested.
 * `crates/render`: wgpu renderer that draws a `SceneFrame` into an offscreen texture. Headless GPU tests read pixels back.
-* `crates/ui-egui`: the UI (`ReplayApp`), backend-agnostic so it runs natively, on the web and in tests. `viewport.rs` is the 3D panel, `graphs.rs` the graphs.
+* `crates/ui-egui`: the UI (`ReplayApp`), backend-agnostic so it runs natively, on the web and in tests. `viewport.rs` is the 3D panel, `graphs.rs` the graphs, `timelines.rs` the parameter timelines. `timeaxis.rs` is the ruler and mouse handling they share; `widgets.rs`/`pins.rs` the shared drawing helpers and pinned entities.
 * `apps/vrd` desktop (eframe + wgpu), `apps/vrd-web` browser (trunk), `apps/vrd-cli` inspect/convert.
 * `testdata/sample.vrd`: a real capture used by tests.
 
@@ -40,3 +40,4 @@ Captures carry no units or axis conventions, so the viewport detects them (`docs
 * Tool calls that read a file you are still writing in the same step race. Render first, then read.
 * `tools/screenshot` is deliberately outside the workspace: `egui_kittest` enables egui's `accesskit` feature, which through feature unification breaks the desktop app's `egui-winit`. Keep it there.
 * egui reports a drag only after the pointer has moved; use `pointer.press_origin()` to decide what a drag is for.
+* Headless UI tests must feed egui a simulated clock (`RawInput::time`): double-clicks are timed by it, and a debug build is too slow for wall-clock time. See `tests/timelines.rs`.

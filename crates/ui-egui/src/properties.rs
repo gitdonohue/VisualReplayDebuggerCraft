@@ -1,4 +1,5 @@
 use egui::{Grid, RichText, ScrollArea};
+use vrd_graph::short_names;
 use vrd_model::Replay;
 
 /// The properties of one entity as of the current frame.
@@ -30,11 +31,14 @@ pub fn ui(ui: &mut egui::Ui, replay: &Replay, selected: Option<i32>, frame: i32)
         // Long parameter names must not squeeze the values into a sliver: keys get at most half the
         // width and are truncated, with the full name on hover.
         let key_width = (ui.available_width() * 0.5).max(60.0);
+        let rows = replay.properties_at(id, frame);
+        // Parameters of one entity often share a long prefix; show what tells them apart.
+        let short = short_names(&rows.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>());
         Grid::new(("properties", id)).num_columns(2).striped(true).spacing([12.0, 4.0]).show(ui, |ui| {
-            for (key, value) in replay.properties_at(id, frame) {
+            for ((key, value), short) in rows.into_iter().zip(short) {
                 ui.scope(|ui| {
                     ui.set_max_width(key_width);
-                    ui.add(egui::Label::new(RichText::new(&key).strong()).truncate()).on_hover_text(&key);
+                    ui.add(egui::Label::new(RichText::new(short).strong()).truncate()).on_hover_text(&key);
                 });
                 ui.add(egui::Label::new(value).wrap().selectable(true));
                 ui.end_row();

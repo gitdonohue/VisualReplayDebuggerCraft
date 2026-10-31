@@ -2,17 +2,14 @@
 
 use egui::{Align2, Color32, FontId, Mesh, Painter, Pos2, Rect, RichText, Sense, Shape, Stroke, pos2, vec2};
 use vrd_engine::{Playback, TimeWindow};
-use vrd_graph::{
-    Band, GraphData, Layout, Member, NameFilter, Scale, Series, Stacking, format_time, format_value, layout,
-    time_ticks, trace,
-};
+use vrd_graph::{Band, GraphData, Layout, Member, NameFilter, Scale, Series, Stacking, format_value, layout, trace};
 use vrd_model::Replay;
 
-const MAX_ENTITIES: usize = 10;
-const RULER_HEIGHT: f32 = 18.0;
+use crate::pins::Pins;
+use crate::timeaxis::{self, RULER_HEIGHT, TimeInput};
+use crate::widgets::{readout, tag};
+
 const HEADER_HEIGHT: f32 = 18.0;
-/// How close to the playhead a drag must start to move the playhead rather than the view.
-const SCRUB_GRAB: f32 = 8.0;
 /// Bands with more series than this get no labels at the playhead (hover for values instead).
 const MAX_PLAYHEAD_LABELS: usize = 8;
 
@@ -30,23 +27,14 @@ const PALETTE: [Color32; 10] = [
     Color32::from_rgb(23, 190, 207),
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Drag {
-    Scrub,
-    Pan,
-}
-
 /// State of the graphs panel.
 pub struct GraphView {
     pub stacking: Stacking,
     pub filled: bool,
     pub ignore_outliers: bool,
-    /// Keep the playhead in view as it moves.
-    pub follow: bool,
     pub filter: String,
-    pinned: Vec<i32>,
     data: GraphData,
-    drag: Option<Drag>,
+    input: TimeInput,
     rect: Rect,
     shown: (usize, usize),
 }
@@ -57,11 +45,9 @@ impl Default for GraphView {
             stacking: Stacking::default(),
             filled: true,
             ignore_outliers: false,
-            follow: true,
             filter: String::new(),
-            pinned: Vec::new(),
             data: GraphData::default(),
-            drag: None,
+            input: TimeInput::default(),
             rect: Rect::NOTHING,
             shown: (0, 0),
         }
@@ -71,35 +57,11 @@ impl Default for GraphView {
 impl GraphView {
     pub fn set_replay(&mut self, replay: &Replay) {
         self.data = GraphData::build(replay);
-        self.pinned.clear();
-        self.drag = None;
-    }
-
-    pub fn pinned(&self) -> &[i32] {
-        &self.pinned
+        self.input = TimeInput::default();
     }
 
     pub fn has_values(&self, entity: i32) -> bool {
         self.data.has_series(entity)
-    }
-
-    /// Pins an entity (keeps it graphed whatever is selected), or unpins it.
-    pub fn toggle_pin(&mut self, entity: i32) {
-        if let Some(i) = self.pinned.iter().position(|&p| p == entity) {
-            self.pinned.remove(i);
-        } else if self.pinned.len() < MAX_ENTITIES {
-            self.pinned.push(entity);
-        }
-    }
-
-    /// The entities to graph: the pinned ones, then the selection, if they recorded any numbers.
-    pub fn graphed(&self, selected: Option<i32>) -> Vec<i32> {
-        let mut out: Vec<i32> = self.pinned.iter().copied().filter(|&id| self.data.has_series(id)).collect();
-        if let Some(id) = selected.filter(|id| self.data.has_series(*id) && !out.contains(id)) {
-            out.push(id);
-        }
-        out.truncate(MAX_ENTITIES);
-        out
     }
 
     /// Where the graphs were last drawn.
@@ -119,10 +81,11 @@ impl GraphView {
         window: &mut TimeWindow,
         playback: &mut Playback,
         selected: &mut Option<i32>,
+        pins: &mut Pins,
     ) {
-        self.toolbar(ui, window, *selected);
+        self.toolbar(ui, window, *selected, pins);
 
-        let graphed = self.graphed(*selected);
+        let graphed = pins.shown(*selected, |id| self.data.has_series(id));
         if graphed.is_empty() {
             self.rect = Rect::NOTHING;
             self.shown = (0, 0);
@@ -152,7 +115,9 @@ impl GraphView {
         self.rect = rect;
         let area = Rect::from_min_max(pos2(rect.left(), rect.top() + RULER_HEIGHT), rect.max);
 
-        self.interact(ui, &response, area, replay, window, playback);
+        if self.input.handle(ui, &response, area, replay, window, playback) {
+            window.fill();
+        }
 
         let painter = ui.painter_at(rect);
         let view = View {
@@ -165,7 +130,8 @@ impl GraphView {
             color_by_entity: !self.stacking.by_entity && graphed.len() > 1,
         };
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
-        view.ruler(ui, &painter, rect);
+        let ruler = Rect::from_min_max(rect.min, pos2(rect.right(), area.top()));
+        timeaxis::ruler(ui, &painter, ruler, area, Some(area), window);
 
         if lay.bands.is_empty() {
             painter.text(
@@ -179,7 +145,7 @@ impl GraphView {
         for (k, band) in lay.bands.iter().enumerate() {
             view.band(ui, &painter, &lay, band, k, self.filled);
         }
-        let toggled = view.entity_headers(ui, &painter, &lay, &self.pinned);
+        let toggled = view.entity_headers(ui, &painter, &lay, pins);
         if view.color_by_entity {
             view.legend(ui, &painter, rect);
         }
@@ -195,17 +161,17 @@ impl GraphView {
         };
         self.shown = (entities, lay.bands.iter().map(|b| b.members.len()).sum());
 
-        if self.drag.is_none()
+        if !self.input.is_dragging()
             && let Some(p) = response.hover_pos().filter(|p| area.contains(*p))
         {
             view.hover(ui, &painter, &lay, p);
         }
         if let Some(id) = toggled {
-            self.toggle_pin(id);
+            pins.toggle(id);
         }
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui, window: &mut TimeWindow, selected: Option<i32>) {
+    fn toolbar(&mut self, ui: &mut egui::Ui, window: &mut TimeWindow, selected: Option<i32>, pins: &mut Pins) {
         ui.horizontal_wrapped(|ui| {
             ui.toggle_value(&mut self.stacking.by_entity, "Per entity")
                 .on_hover_text("Give each entity its own block. Off: compare entities in shared bands");
@@ -217,7 +183,7 @@ impl GraphView {
             ui.toggle_value(&mut self.filled, "Filled");
             ui.toggle_value(&mut self.ignore_outliers, "Clip spikes")
                 .on_hover_text("Scale to the typical range, clipping values far from the mean");
-            ui.toggle_value(&mut self.follow, "Follow").on_hover_text("Keep the playhead in view");
+            ui.toggle_value(&mut window.follow, "Follow").on_hover_text("Keep the playhead in view");
             ui.separator();
             ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("Filter (a|b)…").desired_width(140.0));
             if !self.filter.is_empty() && ui.small_button("✕").on_hover_text("Clear filter").clicked() {
@@ -225,13 +191,13 @@ impl GraphView {
             }
             ui.separator();
             if let Some(id) = selected.filter(|&id| self.data.has_series(id)) {
-                let label = if self.pinned.contains(&id) { "Unpin selection" } else { "Pin selection" };
+                let label = if pins.contains(id) { "Unpin selection" } else { "Pin selection" };
                 if ui.button(label).on_hover_text("Keep this entity graphed while selecting others").clicked() {
-                    self.toggle_pin(id);
+                    pins.toggle(id);
                 }
             }
-            if !self.pinned.is_empty() && ui.button("Clear pins").clicked() {
-                self.pinned.clear();
+            if !pins.is_empty() && ui.button("Clear pins").clicked() {
+                pins.clear();
             }
             if ui
                 .add_enabled(!window.is_full(), egui::Button::new("Fit"))
@@ -240,7 +206,10 @@ impl GraphView {
             {
                 window.fill();
             }
-            ui.weak(format!("{:.2}s – {:.2}s", window.start(), window.end()));
+            ui.add(
+                egui::Label::new(egui::RichText::new(format!("{:.2}s – {:.2}s", window.start(), window.end())).weak())
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
         });
     }
 
@@ -265,62 +234,6 @@ impl GraphView {
                 }
             }
         });
-    }
-
-    fn interact(
-        &mut self,
-        ui: &egui::Ui,
-        response: &egui::Response,
-        area: Rect,
-        replay: &Replay,
-        window: &mut TimeWindow,
-        playback: &mut Playback,
-    ) {
-        let width = area.width().max(1.0);
-        let fraction = |x: f32| f64::from(((x - area.left()) / width).clamp(0.0, 1.0));
-
-        if response.drag_started()
-            && let Some(p) = ui.input(|i| i.pointer.press_origin())
-        {
-            // Decide by where the press began: egui reports the drag only after the pointer moved.
-            let playhead_x = area.left() + window.fraction_of(playback.time()) as f32 * width;
-            self.drag = Some(if (p.x - playhead_x).abs() <= SCRUB_GRAB { Drag::Scrub } else { Drag::Pan });
-        }
-        if response.dragged() {
-            match self.drag {
-                Some(Drag::Scrub) => {
-                    if let Some(p) = response.interact_pointer_pos() {
-                        playback.seek_time(replay, window.time_at(fraction(p.x)));
-                    }
-                }
-                Some(Drag::Pan) => window.pan(-f64::from(response.drag_delta().x / width) * window.range()),
-                None => {}
-            }
-        }
-        if response.drag_stopped() {
-            self.drag = None;
-        }
-        if response.clicked()
-            && let Some(p) = response.interact_pointer_pos()
-        {
-            playback.seek_time(replay, window.time_at(fraction(p.x)));
-        }
-        if response.double_clicked() {
-            window.fill();
-        }
-        if response.hovered() {
-            let (scroll, zoom) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta()));
-            let about = window.time_at(response.hover_pos().map_or(0.5, |p| fraction(p.x)));
-            if scroll.y != 0.0 {
-                window.zoom((-f64::from(scroll.y) * 0.003).exp(), about);
-            }
-            if zoom != 1.0 {
-                window.zoom(1.0 / f64::from(zoom), about);
-            }
-            if scroll.x != 0.0 {
-                window.pan(-f64::from(scroll.x / width) * window.range());
-            }
-        }
     }
 }
 
@@ -374,28 +287,6 @@ impl View<'_> {
     fn y_of(rect: Rect, scale: Scale, v: f32) -> f32 {
         let inner = rect.shrink2(vec2(0.0, 2.0));
         inner.bottom() - scale.fraction(v).clamp(0.0, 1.0) * inner.height()
-    }
-
-    fn ruler(&self, ui: &egui::Ui, painter: &Painter, rect: Rect) {
-        let visuals = ui.visuals();
-        let ruler = Rect::from_min_max(rect.min, pos2(rect.right(), self.area.top()));
-        painter.rect_filled(ruler, 0.0, visuals.faint_bg_color);
-        let (step, ticks) = time_ticks(self.window.start(), self.window.end(), self.area.width(), 70.0);
-        let weak = visuals.weak_text_color();
-        let grid = weak.gamma_multiply(0.18);
-        for t in ticks {
-            let x = self.x_of(t);
-            painter.line_segment([pos2(x, ruler.bottom() - 5.0), pos2(x, ruler.bottom())], Stroke::new(1.0_f32, weak));
-            painter.line_segment([pos2(x, self.area.top()), pos2(x, self.area.bottom())], Stroke::new(1.0_f32, grid));
-            painter.text(
-                pos2(x + 3.0, ruler.center().y),
-                Align2::LEFT_CENTER,
-                format_time(t, step),
-                FontId::proportional(11.0),
-                weak,
-            );
-        }
-        painter.line_segment([ruler.left_bottom(), ruler.right_bottom()], visuals.widgets.noninteractive.bg_stroke);
     }
 
     fn band(&self, ui: &egui::Ui, painter: &Painter, lay: &Layout, band: &Band, index: usize, filled: bool) {
@@ -461,7 +352,7 @@ impl View<'_> {
     }
 
     /// Entity names with a pin button. Returns an entity whose pin was toggled.
-    fn entity_headers(&self, ui: &mut egui::Ui, painter: &Painter, lay: &Layout, pinned: &[i32]) -> Option<i32> {
+    fn entity_headers(&self, ui: &mut egui::Ui, painter: &Painter, lay: &Layout, pins: &Pins) -> Option<i32> {
         let visuals = ui.visuals().clone();
         let mut toggled = None;
         for block in &lay.blocks {
@@ -483,7 +374,7 @@ impl View<'_> {
             painter.rect_filled(header, 3.0, visuals.extreme_bg_color.gamma_multiply(0.85));
             painter.galley(at, galley, visuals.strong_text_color());
             if rect.height() >= HEADER_HEIGHT * 2.0 {
-                let is_pinned = pinned.contains(&id);
+                let is_pinned = pins.contains(id);
                 let button = egui::Button::new(RichText::new(if is_pinned { "Unpin" } else { "Pin" }).small())
                     .selected(is_pinned);
                 let button_rect = Rect::from_min_size(header.right_top() + vec2(4.0, 0.0), vec2(42.0, header.height()));
@@ -531,11 +422,7 @@ impl View<'_> {
             return;
         }
         let x = self.x_of(t);
-        let red = Color32::from_rgb(230, 40, 40);
-        painter.line_segment(
-            [pos2(x, self.area.top() - RULER_HEIGHT), pos2(x, self.area.bottom())],
-            Stroke::new(1.5_f32, red),
-        );
+        timeaxis::playhead(painter, self.window, self.area, t, self.area.top() - RULER_HEIGHT, self.area.bottom());
         let backdrop = ui.visuals().extreme_bg_color.gamma_multiply(0.8);
         for band in &lay.bands {
             let rect = self.band_rect(band.top, band.bottom);
@@ -578,9 +465,12 @@ impl View<'_> {
     /// A guide line at the pointer and a read-out of the values there for the band under it.
     fn hover(&self, ui: &egui::Ui, painter: &Painter, lay: &Layout, p: Pos2) {
         let t = self.window.time_at(f64::from((p.x - self.area.left()) / self.area.width().max(1.0)));
-        painter.line_segment(
-            [pos2(p.x, self.area.top()), pos2(p.x, self.area.bottom())],
-            Stroke::new(1.0_f32, Color32::from_gray(128).gamma_multiply(0.6)),
+        crate::widgets::guide(
+            painter,
+            p.x,
+            self.area.top(),
+            self.area.bottom(),
+            Color32::from_gray(128).gamma_multiply(0.6),
         );
         let Some(band) = lay.bands.iter().find(|b| {
             let r = self.band_rect(b.top, b.bottom);
@@ -589,22 +479,15 @@ impl View<'_> {
             return;
         };
 
-        let visuals = ui.visuals();
-        let font = FontId::proportional(12.0);
         let frame = self.replay.frame_for_time(t);
-        let mut rows = vec![(format!("{t:.3}s  ·  frame {frame}"), visuals.strong_text_color())];
+        let mut lines = vec![(format!("{t:.3}s  ·  frame {frame}"), ui.visuals().strong_text_color())];
         let mut members: Vec<(Member, Option<f32>)> =
             band.members.iter().map(|&m| (m, self.series(m).value_at(t))).collect();
-        // Busy bands list the largest values first, and only as many as fit.
+        // Busy bands list the largest values first.
         if members.len() > 1 {
             members.sort_by(|a, b| b.1.unwrap_or(f32::MIN).total_cmp(&a.1.unwrap_or(f32::MIN)));
         }
-        // As many rows as fit in the panel (above the ruler too), leaving one for the "more" line.
-        let row_height = ui.fonts_mut(|f| f.row_height(&font)) + 2.0;
-        let fit = (((self.area.bottom() - (self.area.top() - RULER_HEIGHT)) - 8.0) / row_height) as usize;
-        let max_rows = fit.saturating_sub(1).max(1);
-        let hidden = if members.len() > max_rows { members.len() - (max_rows - 1).max(1) } else { 0 };
-        for &(m, value) in members.iter().take(members.len() - hidden) {
+        for (m, value) in members {
             let s = self.series(m);
             let who = if self.color_by_entity {
                 format!("{} · {}", self.entity_name(m.entity), s.name)
@@ -612,42 +495,10 @@ impl View<'_> {
                 s.name.clone()
             };
             let value = value.map_or_else(|| "–".to_string(), format_value);
-            rows.push((format!("{who}: {value}"), self.color(m)));
+            lines.push((format!("{who}: {value}"), self.color(m)));
         }
-        if hidden > 0 {
-            rows.push((format!("and {hidden} more"), visuals.weak_text_color()));
-        }
-
-        let galleys: Vec<_> =
-            rows.into_iter().map(|(text, color)| painter.layout_no_wrap(text, font.clone(), color)).collect();
-        let width = galleys.iter().map(|g| g.size().x).fold(0.0, f32::max) + 12.0;
-        let height = galleys.iter().map(|g| g.size().y + 2.0).sum::<f32>() + 8.0;
-        // Beside the pointer, flipped to the other side near the right edge, kept inside the graph.
-        let x = if p.x + 14.0 + width <= self.area.right() { p.x + 14.0 } else { p.x - 14.0 - width };
-        let top = self.area.top() - RULER_HEIGHT;
-        let y = (p.y - height * 0.5).clamp(top, (self.area.bottom() - height).max(top));
-        let panel = Rect::from_min_size(pos2(x.max(self.area.left()), y), vec2(width, height));
-        painter.rect(
-            panel,
-            4.0,
-            visuals.extreme_bg_color.gamma_multiply(0.95),
-            visuals.window_stroke,
-            egui::StrokeKind::Inside,
-        );
-        let mut row_y = panel.top() + 4.0;
-        for g in galleys {
-            let h = g.size().y;
-            painter.galley(pos2(panel.left() + 6.0, row_y), g, Color32::PLACEHOLDER);
-            row_y += h + 2.0;
-        }
+        // The panel may reach up over the ruler when the graph is short.
+        let bounds = Rect::from_min_max(pos2(self.area.left(), self.area.top() - RULER_HEIGHT), self.area.max);
+        readout(ui, painter, bounds, p, lines);
     }
-}
-
-/// Small text on a backdrop, so it stays legible over lines and fills.
-fn tag(painter: &Painter, at: Pos2, align: Align2, text: &str, color: Color32, backdrop: Color32) -> Rect {
-    let galley = painter.layout_no_wrap(text.to_string(), FontId::proportional(11.0), color);
-    let rect = align.anchor_size(at, galley.size());
-    painter.rect_filled(rect.expand(1.0), 2.0, backdrop);
-    painter.galley(rect.min, galley, color);
-    rect
 }

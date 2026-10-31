@@ -6,9 +6,9 @@
 //!     --select PhysicsSceneQueriesSystem --frame 600
 //! ```
 //!
-//! Options: `--size WxH`, `--select NAME`, `--pin NAME` (repeatable), `--tab logs|graphs`,
+//! Options: `--size WxH`, `--select NAME`, `--pin NAME` (repeatable), `--tab logs|graphs|timelines`,
 //! `--frame N`, `--zoom FACTOR` (narrow the graphs' time window around the playhead),
-//! `--overlay` (graphs not split per entity), `--clip` (clip spikes), `--filter TEXT`, `--dark`,
+//! `--overlay` (graphs not split per entity), `--clip` (clip spikes), `--flat` / `--changes-only`\n//! (timelines), `--filter TEXT`, `--dark`,
 //! `--hover X,Y` (pointer at fractions of the graph area, to show the hover read-out).
 
 use egui_kittest::Harness;
@@ -57,7 +57,7 @@ fn run() -> Result<(), String> {
     let select = value("--select").map(|n| id_of(&n)).transpose()?;
 
     for id in pins {
-        app.graphs_mut().toggle_pin(id);
+        app.toggle_pin(id);
     }
     if let Some(id) = select {
         app.select(Some(id));
@@ -67,17 +67,25 @@ fn run() -> Result<(), String> {
     }
     match value("--tab").as_deref() {
         Some("graphs") => app.set_bottom_tab(BottomTab::Graphs),
+        Some("timelines") => app.set_bottom_tab(BottomTab::Timelines),
         Some("logs") | None => app.set_bottom_tab(BottomTab::Logs),
         Some(other) => return Err(format!("unknown tab {other}")),
     }
     if flag("--overlay") {
         app.graphs_mut().stacking.by_entity = false;
     }
+    if flag("--flat") {
+        app.timelines_mut().by_depth = false;
+    }
+    if flag("--changes-only") {
+        app.timelines_mut().changes_only = true;
+    }
     if flag("--clip") {
         app.graphs_mut().ignore_outliers = true;
     }
     if let Some(filter) = value("--filter") {
-        app.graphs_mut().filter = filter;
+        app.graphs_mut().filter = filter.clone();
+        app.timelines_mut().filter = filter;
     }
     let zoom = value("--zoom").map(|z| z.parse::<f64>().map_err(|_| "--zoom needs a number")).transpose()?;
 
@@ -112,7 +120,9 @@ fn run() -> Result<(), String> {
     if let Some(hover) = value("--hover") {
         let (fx, fy) = hover.split_once(',').ok_or("--hover looks like 0.6,0.5 (fractions of the graph area)")?;
         let (fx, fy): (f32, f32) = (fx.parse().map_err(|_| "bad --hover x")?, fy.parse().map_err(|_| "bad --hover y")?);
-        let r = harness.state().graphs().rect();
+        let app = harness.state();
+        let r =
+            if app.bottom_tab() == BottomTab::Timelines { app.timelines().plot_rect() } else { app.graphs().rect() };
         let at = egui::pos2(r.left() + fx * r.width(), r.top() + fy * r.height());
         harness.event(egui::Event::PointerMoved(at));
         for _ in 0..3 {
@@ -121,7 +131,12 @@ fn run() -> Result<(), String> {
     }
     let image = harness.render()?;
     image.save(&out).map_err(|e| format!("cannot write {out}: {e}"))?;
-    let (entities, series) = harness.state().graphs().shown();
-    println!("wrote {out} ({}x{}); graphs: {entities} entities, {series} series", image.width(), image.height());
+    let app = harness.state();
+    let (what, (entities, rows)) = match app.bottom_tab() {
+        BottomTab::Graphs => ("graphs", app.graphs().shown()),
+        BottomTab::Timelines => ("timelines", app.timelines().shown()),
+        BottomTab::Logs => ("logs", (0, 0)),
+    };
+    println!("wrote {out} ({}x{}); {what}: {entities} entities, {rows} rows", image.width(), image.height());
     Ok(())
 }

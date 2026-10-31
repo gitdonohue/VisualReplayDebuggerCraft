@@ -6,6 +6,8 @@ use crate::entities::EntityTree;
 use crate::graphs::GraphView;
 use crate::loader::{self, Inbox, Incoming};
 use crate::logs::LogView;
+use crate::pins::Pins;
+use crate::timelines::TimelineView;
 use crate::viewport::Viewport;
 use crate::{properties, transport};
 
@@ -18,6 +20,7 @@ pub enum BottomTab {
     #[default]
     Logs,
     Graphs,
+    Timelines,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -43,6 +46,9 @@ pub struct ReplayApp {
     selected: Option<i32>,
     logs: LogView,
     graphs: GraphView,
+    timelines: TimelineView,
+    /// Entities kept in the graphs and timelines whatever is selected.
+    pins: Pins,
     bottom_tab: BottomTab,
     /// The span of time the graphs show.
     window: TimeWindow,
@@ -61,6 +67,8 @@ impl Default for ReplayApp {
             selected: None,
             logs: LogView::default(),
             graphs: GraphView::default(),
+            timelines: TimelineView::default(),
+            pins: Pins::default(),
             bottom_tab: BottomTab::default(),
             window: TimeWindow::default(),
             entities: EntityTree::default(),
@@ -102,6 +110,8 @@ impl ReplayApp {
                 self.selected = replay.root_entities().first().copied();
                 self.logs.reset();
                 self.graphs.set_replay(&replay);
+                self.timelines.set_replay(&replay);
+                self.pins.clear();
                 self.window = TimeWindow::new(replay.total_time());
                 self.entities = EntityTree::default();
                 self.viewport.set_replay(&replay);
@@ -177,6 +187,34 @@ impl ReplayApp {
         &mut self.graphs
     }
 
+    pub fn timelines(&self) -> &TimelineView {
+        &self.timelines
+    }
+
+    pub fn timelines_mut(&mut self) -> &mut TimelineView {
+        &mut self.timelines
+    }
+
+    /// Pins an entity in the graphs and timelines, or unpins it.
+    pub fn toggle_pin(&mut self, entity: i32) {
+        self.pins.toggle(entity);
+    }
+
+    pub fn pins(&self) -> &Pins {
+        &self.pins
+    }
+
+    /// Moves the playhead to the next or previous change of what the timelines show.
+    pub fn step_timeline_event(&mut self, forward: bool) {
+        let Some(session) = &self.session else {
+            return;
+        };
+        let t = self.playback.time();
+        if let Some(event) = self.timelines.neighbouring_event(self.selected, &self.pins, t, forward) {
+            self.playback.seek_time(&session.replay, event);
+        }
+    }
+
     /// The 3D viewport's camera.
     pub fn viewport_camera(&self) -> &vrd_scene::Camera {
         self.viewport.camera()
@@ -238,7 +276,7 @@ impl ReplayApp {
             if self.playback.advance(&session.replay, dt) || self.playback.is_playing() {
                 ctx.request_repaint();
             }
-            self.window.observe_playhead(self.playback.time(), self.graphs.follow);
+            self.window.observe_playhead(self.playback.time());
         }
 
         if self.title_dirty {
@@ -252,7 +290,20 @@ impl ReplayApp {
 
         self.top_bar(ctx);
 
-        let Self { session, playback, selected, logs, graphs, bottom_tab, window, entities, viewport, .. } = self;
+        let Self {
+            session,
+            playback,
+            selected,
+            logs,
+            graphs,
+            timelines,
+            pins,
+            bottom_tab,
+            window,
+            entities,
+            viewport,
+            ..
+        } = self;
 
         match session {
             Some(Session { replay, .. }) => {
@@ -271,15 +322,20 @@ impl ReplayApp {
                         frame,
                         selected,
                         &mut viewport.options.hidden_entities,
-                        graphs.pinned(),
+                        pins.as_slice(),
                     );
                     if let Some(id) = action.focus {
                         *selected = Some(id);
                         viewport.focus(replay, id, frame);
                     }
                     if let Some(id) = action.toggle_pin {
-                        graphs.toggle_pin(id);
-                        *bottom_tab = BottomTab::Graphs;
+                        pins.toggle(id);
+                        // Show the entity where it has something to show.
+                        if *bottom_tab == BottomTab::Logs {
+                            let only_text =
+                                replay.entity(id).is_some_and(|e| e.values.is_empty() && !e.params.is_empty());
+                            *bottom_tab = if only_text { BottomTab::Timelines } else { BottomTab::Graphs };
+                        }
                     }
                 });
                 egui::SidePanel::right("properties").default_width(320.0).width_range(200.0..=700.0).show(ctx, |ui| {
@@ -296,6 +352,8 @@ impl ReplayApp {
                                 .on_hover_text("Log entries (L)");
                             ui.selectable_value(bottom_tab, BottomTab::Graphs, RichText::new("Graphs").heading())
                                 .on_hover_text("Numeric values over time (G)");
+                            ui.selectable_value(bottom_tab, BottomTab::Timelines, RichText::new("Timelines").heading())
+                                .on_hover_text("Text parameters over time (T)");
                         });
                         match bottom_tab {
                             BottomTab::Logs => {
@@ -308,7 +366,8 @@ impl ReplayApp {
                                     playback.seek_frame(replay, target);
                                 }
                             }
-                            BottomTab::Graphs => graphs.ui(ui, replay, window, playback, selected),
+                            BottomTab::Graphs => graphs.ui(ui, replay, window, playback, selected, pins),
+                            BottomTab::Timelines => timelines.ui(ui, replay, window, playback, selected, pins),
                         }
                     });
                 egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0)).show(
@@ -404,6 +463,9 @@ impl ReplayApp {
         ctx.input_mut(|i| {
             if i.consume_key(Modifiers::NONE, Key::G) {
                 *tab = BottomTab::Graphs;
+            }
+            if i.consume_key(Modifiers::NONE, Key::T) {
+                *tab = BottomTab::Timelines;
             }
             if i.consume_key(Modifiers::NONE, Key::L) {
                 *tab = BottomTab::Logs;

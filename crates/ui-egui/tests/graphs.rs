@@ -7,9 +7,19 @@ fn sample() -> Vec<u8> {
     std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/sample.vrd")).unwrap()
 }
 
+thread_local! {
+    /// A simulated clock: egui times double-clicks by it, and wall-clock time in a debug build is too slow.
+    static CLOCK: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+}
+
 fn frame(ctx: &Context, app: &mut ReplayApp, events: Vec<Event>) {
+    let time = CLOCK.with(|c| {
+        c.set(c.get() + 0.016);
+        c.get()
+    });
     let input = RawInput {
         screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(1500.0, 1000.0))),
+        time: Some(time),
         events,
         ..RawInput::default()
     };
@@ -161,7 +171,7 @@ fn the_view_follows_playback_and_can_be_left_alone() {
     let t = app.playback().time();
     assert!(w.start() <= t && t <= w.end(), "a jump brings the playhead into view");
 
-    app.graphs_mut().follow = false;
+    app.time_window_mut().follow = false;
     app.seek_frame(app.replay().unwrap().frame_for_time(total * 0.05));
     frame(&ctx, &mut app, vec![]);
     let w = app.time_window();
@@ -175,7 +185,7 @@ fn pinning_keeps_an_entity_graphed_across_selections() {
     let player = id(&app, "PlayerCharacter");
     let navmesh = id(&app, "NavMesh");
 
-    app.graphs_mut().toggle_pin(stats);
+    app.toggle_pin(stats);
     app.select(Some(player));
     frame(&ctx, &mut app, vec![]);
     assert_eq!(app.graphs().shown(), (2, 7), "pinned stats plus the selected player");
@@ -185,7 +195,7 @@ fn pinning_keeps_an_entity_graphed_across_selections() {
     frame(&ctx, &mut app, vec![]);
     assert_eq!(app.graphs().shown(), (1, 5));
 
-    app.graphs_mut().toggle_pin(stats);
+    app.toggle_pin(stats);
     frame(&ctx, &mut app, vec![]);
     assert_eq!(app.graphs().shown(), (0, 0));
 }
@@ -207,7 +217,7 @@ fn overlaying_entities_shares_bands() {
     let troopers: Vec<i32> =
         ["imperial_stormtrooper#1", "imperial_stormtrooper#4"].iter().map(|n| id(&app, n)).collect();
     for t in &troopers {
-        app.graphs_mut().toggle_pin(*t);
+        app.toggle_pin(*t);
     }
     app.select(Some(id(&app, "PlayerCharacter")));
     app.graphs_mut().stacking.by_entity = false;

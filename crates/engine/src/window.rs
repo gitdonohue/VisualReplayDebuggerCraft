@@ -5,6 +5,8 @@ pub struct TimeWindow {
     start: f64,
     end: f64,
     total: f64,
+    /// Keep the playhead in view as it moves (see [`Self::observe_playhead`]).
+    pub follow: bool,
     last_playhead: Option<f64>,
 }
 
@@ -23,7 +25,7 @@ impl TimeWindow {
     /// A window showing the whole of a capture `total` seconds long.
     pub fn new(total: f64) -> Self {
         let total = if total.is_finite() { total.max(0.0) } else { 0.0 };
-        Self { start: 0.0, end: total, total, last_playhead: None }
+        Self { start: 0.0, end: total, total, follow: true, last_playhead: None }
     }
 
     pub fn start(&self) -> f64 {
@@ -94,13 +96,13 @@ impl TimeWindow {
         self.start + fraction * self.range()
     }
 
-    /// Keeps the playhead in view when it moves. Moving just past an edge (as during playback)
+    /// Keeps the playhead in view when it moves, if [`Self::follow`] is on. Moving just past an edge (as during playback)
     /// slides the window along with it; a jump elsewhere centres the window on it. A playhead that
     /// has not moved leaves the window alone, so the user can pan away from it while paused.
-    pub fn observe_playhead(&mut self, playhead: f64, follow: bool) {
+    pub fn observe_playhead(&mut self, playhead: f64) {
         let moved = self.last_playhead != Some(playhead);
         self.last_playhead = Some(playhead);
-        if !follow || !moved || !playhead.is_finite() || (playhead >= self.start && playhead <= self.end) {
+        if !self.follow || !moved || !playhead.is_finite() || (playhead >= self.start && playhead <= self.end) {
             return;
         }
         let range = self.range();
@@ -209,7 +211,7 @@ mod tests {
         w.zoom(0.5, 0.0);
         w.pan(3.0);
         w.set(1.0, 2.0);
-        w.observe_playhead(1.0, true);
+        w.observe_playhead(1.0);
         assert_eq!((w.start(), w.end()), (0.0, 0.0));
         assert_eq!(w.fraction_of(1.0), 0.0);
     }
@@ -218,19 +220,19 @@ mod tests {
     fn the_playhead_is_followed_while_it_moves() {
         let mut w = TimeWindow::new(100.0);
         w.set(10.0, 20.0);
-        w.observe_playhead(15.0, true);
+        w.observe_playhead(15.0);
         assert_eq!((w.start(), w.end()), (10.0, 20.0), "inside: nothing to do");
 
         // Playback creeps past the right edge: the window slides with it.
-        w.observe_playhead(20.5, true);
+        w.observe_playhead(20.5);
         assert!(close(w.end(), 20.5) && close(w.range(), 10.0));
         // Stepping back past the left edge slides the other way.
         w.set(10.0, 20.0);
-        w.observe_playhead(9.0, true);
+        w.observe_playhead(9.0);
         assert!(close(w.start(), 9.0));
 
         // A jump far away recentres.
-        w.observe_playhead(70.0, true);
+        w.observe_playhead(70.0);
         assert!(close(w.start(), 65.0) && close(w.end(), 75.0));
     }
 
@@ -238,9 +240,9 @@ mod tests {
     fn a_still_playhead_lets_the_user_pan_away() {
         let mut w = TimeWindow::new(100.0);
         w.set(10.0, 20.0);
-        w.observe_playhead(15.0, true);
+        w.observe_playhead(15.0);
         w.pan(50.0);
-        w.observe_playhead(15.0, true);
+        w.observe_playhead(15.0);
         assert_eq!((w.start(), w.end()), (60.0, 70.0));
     }
 
@@ -248,9 +250,11 @@ mod tests {
     fn following_can_be_switched_off_without_a_jump_when_it_is_switched_back_on() {
         let mut w = TimeWindow::new(100.0);
         w.set(10.0, 20.0);
-        w.observe_playhead(50.0, false);
+        w.follow = false;
+        w.observe_playhead(50.0);
         assert_eq!((w.start(), w.end()), (10.0, 20.0));
-        w.observe_playhead(50.0, true);
+        w.follow = true;
+        w.observe_playhead(50.0);
         assert_eq!((w.start(), w.end()), (10.0, 20.0), "the playhead did not move since");
     }
 }

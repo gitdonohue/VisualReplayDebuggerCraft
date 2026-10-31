@@ -1,13 +1,22 @@
-//! The CPU side of the graphs panel: numeric series from a capture, their scales, how they are
-//! stacked into bands, and how each is reduced to what fits in the pixels of a time window. No UI
-//! code, so all of it is unit tested.
+//! The CPU side of the time-based panels. For the graphs: numeric series from a capture, their
+//! scales, how they are stacked into bands, and how each is reduced to what fits in the pixels of a
+//! time window. For the properties timelines: string parameters as runs of values, split by the
+//! levels of their paths, and the blocks to draw for a window. No UI code, so all of it is unit
+//! tested.
 
 mod layout;
+mod rows;
 mod series;
 mod ticks;
 mod trace;
+mod tracks;
 
 pub use layout::{Band, EntityBlock, Layout, Member, Stacking, layout};
+pub use rows::{
+    Block, BlockKind, MIN_BLOCK_PX, Row, RowOptions, Section, blocks, event_times, frame_stripes, neighbouring_event,
+    row_level, rows, short_names, smallest_block_at,
+};
 pub use series::{GraphData, NameFilter, Scale, Series, Stats, depth};
 pub use ticks::{format_time, format_value, time_ticks};
 pub use trace::{Trace, trace};
+pub use tracks::{Level, Run, TimelineData, Track, color_label, path_of, segments};

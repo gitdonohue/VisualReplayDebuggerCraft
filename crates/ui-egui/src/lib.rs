@@ -9,12 +9,18 @@ mod graphs;
 mod loader;
 mod log_filter;
 mod logs;
+mod pins;
 mod properties;
 mod theme;
+mod timeaxis;
+mod timelines;
 mod transport;
 mod viewport;
+mod widgets;
 
 pub use app::{BottomTab, ReplayApp};
 pub use graphs::GraphView;
 pub use loader::{Inbox, Incoming};
 pub use log_filter::LogFilter;
+pub use pins::Pins;
+pub use timelines::{HEADER_HEIGHT, ROW_HEIGHT, TimelineView};

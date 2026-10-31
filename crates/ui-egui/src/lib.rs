@@ -5,6 +5,7 @@
 
 mod app;
 mod entities;
+mod graphs;
 mod loader;
 mod log_filter;
 mod logs;
@@ -13,6 +14,7 @@ mod theme;
 mod transport;
 mod viewport;
 
-pub use app::ReplayApp;
+pub use app::{BottomTab, ReplayApp};
+pub use graphs::GraphView;
 pub use loader::{Inbox, Incoming};
 pub use log_filter::LogFilter;

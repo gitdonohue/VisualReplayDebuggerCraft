@@ -1,0 +1,18 @@
+[package]
+name = "vrd-screenshot"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Renders the whole UI to a PNG after scripted interactions (a development tool)."
+
+# Not a workspace member, so its egui features (accesskit, pulled in by egui_kittest) never reach
+# the apps through feature unification. Run it with: cargo run --manifest-path tools/screenshot/Cargo.toml -- ...
+[workspace]
+
+[dependencies]
+vrd-ui-egui = { path = "../../crates/ui-egui" }
+egui = "0.33.3"
+egui_kittest = { version = "0.33.3", features = ["wgpu"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+

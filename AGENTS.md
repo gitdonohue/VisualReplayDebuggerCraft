@@ -7,10 +7,11 @@ tool) and `C:\Projects\solidcraft`.
 ## Layout
 * `crates/format`: `.vrd` reader/writer. See `docs/format.md`. Must keep loading existing captures.
 * `crates/model`: `Replay`, the indexed view of a capture (entities, timelines, logs, draws, frame/time).
-* `crates/engine`: `Playback` (time, frame, speed, stepping). No UI code.
+* `crates/engine`: `Playback` (time, frame, speed, stepping) and `TimeWindow` (the zoomable span timeline views show). No UI code.
+* `crates/graph`: CPU side of the graphs (series, scales, band layout, per-pixel decimation, ticks). No UI code, fully unit tested.
 * `crates/scene`: CPU side of the 3D viewport (camera, tessellation, `build_frame`, picking). No GPU code, fully unit tested.
 * `crates/render`: wgpu renderer that draws a `SceneFrame` into an offscreen texture. Headless GPU tests read pixels back.
-* `crates/ui-egui`: the UI (`ReplayApp`), backend-agnostic so it runs natively, on the web and in tests. `viewport.rs` is the 3D panel.
+* `crates/ui-egui`: the UI (`ReplayApp`), backend-agnostic so it runs natively, on the web and in tests. `viewport.rs` is the 3D panel, `graphs.rs` the graphs.
 * `apps/vrd` desktop (eframe + wgpu), `apps/vrd-web` browser (trunk), `apps/vrd-cli` inspect/convert.
 * `testdata/sample.vrd`: a real capture used by tests.
 
@@ -19,6 +20,7 @@ tool) and `C:\Projects\solidcraft`.
 * `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all`
 * `cargo run -p vrd -- testdata/sample.vrd`
 * `cargo run -p vrd-cli -- render testdata/sample.vrd --out out.png --frame 600` draws a frame headlessly. Use it to look at rendering changes. `info` and `entities` print what a capture contains.
+* `cargo run --release --manifest-path tools/screenshot/Cargo.toml -- testdata/sample.vrd out.png --tab graphs --select SystemStats` renders the whole UI (viewport included) after scripted input. Use it to look at UI changes; see the file header for options.
 * `cd apps/vrd-web && trunk serve`, then open `/?url=sample.vrd`
 * The web app deploys to https://gitdonohue.github.io/VisualReplayDebuggerCraft/ from `.github/workflows/pages.yml` on every push to `develop` or `main` (Pages source must be "GitHub Actions"). To test the subpath build locally: `trunk serve --release --public-url /VisualReplayDebuggerCraft/`.
 
@@ -36,3 +38,5 @@ Captures carry no units or axis conventions, so the viewport detects them (`docs
 * The renderer outputs an `Rgba8Unorm` texture holding sRGB-encoded colour (the shader encodes). egui expects gamma-encoded images; an `*Srgb` format makes the viewport look too dark.
 * wgpu paints with reversed-Z (depth cleared to 0, compare `Greater`, infinite far plane).
 * Tool calls that read a file you are still writing in the same step race. Render first, then read.
+* `tools/screenshot` is deliberately outside the workspace: `egui_kittest` enables egui's `accesskit` feature, which through feature unification breaks the desktop app's `egui-winit`. Keep it there.
+* egui reports a drag only after the pointer has moved; use `pointer.press_origin()` to decide what a drag is for.

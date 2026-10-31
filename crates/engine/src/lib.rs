@@ -2,6 +2,10 @@
 //! and frame stepping. It has no UI code, so the desktop app, the web app and the MCP server can
 //! share it.
 
+mod window;
+
+pub use window::TimeWindow;
+
 use vrd_model::Replay;
 
 pub const MIN_SPEED: f64 = 0.01;

@@ -11,6 +11,8 @@ use crate::log_filter::contains_ignore_case;
 pub struct EntityAction {
     /// Select this entity and look at it in the viewport.
     pub focus: Option<i32>,
+    /// Pin or unpin this entity in the graphs.
+    pub toggle_pin: Option<i32>,
 }
 
 /// The entity hierarchy with a search box.
@@ -27,6 +29,7 @@ impl EntityTree {
         frame: i32,
         selected: &mut Option<i32>,
         hidden: &mut BTreeSet<i32>,
+        pinned: &[i32],
     ) -> EntityAction {
         let mut action = EntityAction::default();
         ui.horizontal(|ui| {
@@ -46,7 +49,7 @@ impl EntityTree {
             return action;
         }
 
-        let mut ctx = Ctx { replay, frame, selected, hidden, action: &mut action };
+        let mut ctx = Ctx { replay, frame, selected, hidden, pinned, action: &mut action };
         let needle = self.filter.trim().to_ascii_lowercase();
         if needle.is_empty() {
             ScrollArea::both().auto_shrink([false; 2]).show(ui, |ui| {
@@ -83,6 +86,7 @@ struct Ctx<'a> {
     frame: i32,
     selected: &'a mut Option<i32>,
     hidden: &'a mut BTreeSet<i32>,
+    pinned: &'a [i32],
     action: &'a mut EntityAction,
 }
 
@@ -148,6 +152,13 @@ fn entity_label(ui: &mut egui::Ui, ctx: &mut Ctx, id: i32) {
         if ui.button("Focus in viewport").clicked() {
             ctx.action.focus = Some(id);
             ui.close();
+        }
+        if !entity.values.is_empty() {
+            let label = if ctx.pinned.contains(&id) { "Unpin from graphs" } else { "Pin in graphs" };
+            if ui.button(label).clicked() {
+                ctx.action.toggle_pin = Some(id);
+                ui.close();
+            }
         }
         let label = if is_hidden { "Show in viewport" } else { "Hide in viewport" };
         if ui.button(label).clicked() {

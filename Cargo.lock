@@ -2598,6 +2598,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vrd-graph"
+version = "0.1.0"
+dependencies = [
+ "vrd-format",
+ "vrd-model",
+]
+
+[[package]]
 name = "vrd-model"
 version = "0.1.0"
 dependencies = [
@@ -2636,6 +2644,7 @@ dependencies = [
  "rfd",
  "vrd-engine",
  "vrd-format",
+ "vrd-graph",
  "vrd-model",
  "vrd-render",
  "vrd-scene",

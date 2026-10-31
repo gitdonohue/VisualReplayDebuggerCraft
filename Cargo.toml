@@ -15,7 +15,6 @@ vrd-format = { path = "crates/format" }
 vrd-model = { path = "crates/model" }
 vrd-engine = { path = "crates/engine" }
 vrd-scene = { path = "crates/scene" }
-vrd-render = { path = "crates/render" }
 vrd-ui-egui = { path = "crates/ui-egui" }
 
 [workspace.lints.rust]

@@ -1,8 +1,9 @@
 use egui::{Color32, Key, KeyboardShortcut, Modifiers, RichText};
-use vrd_engine::Playback;
+use vrd_engine::{Playback, TimeWindow};
 use vrd_model::Replay;
 
 use crate::entities::EntityTree;
+use crate::graphs::GraphView;
 use crate::loader::{self, Inbox, Incoming};
 use crate::logs::LogView;
 use crate::viewport::Viewport;
@@ -10,6 +11,14 @@ use crate::{properties, transport};
 
 const APP_NAME: &str = "Visual Replay Debugger";
 const OPEN_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+
+/// What the panel under the viewport shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BottomTab {
+    #[default]
+    Logs,
+    Graphs,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Level {
@@ -33,6 +42,10 @@ pub struct ReplayApp {
     playback: Playback,
     selected: Option<i32>,
     logs: LogView,
+    graphs: GraphView,
+    bottom_tab: BottomTab,
+    /// The span of time the graphs show.
+    window: TimeWindow,
     entities: EntityTree,
     viewport: Viewport,
     inbox: Inbox,
@@ -47,6 +60,9 @@ impl Default for ReplayApp {
             playback: Playback::new(),
             selected: None,
             logs: LogView::default(),
+            graphs: GraphView::default(),
+            bottom_tab: BottomTab::default(),
+            window: TimeWindow::default(),
             entities: EntityTree::default(),
             viewport: Viewport::default(),
             inbox: Inbox::default(),
@@ -85,6 +101,8 @@ impl ReplayApp {
                 self.playback = playback;
                 self.selected = replay.root_entities().first().copied();
                 self.logs.reset();
+                self.graphs.set_replay(&replay);
+                self.window = TimeWindow::new(replay.total_time());
                 self.entities = EntityTree::default();
                 self.viewport.set_replay(&replay);
                 self.session = Some(Session { name, replay });
@@ -131,6 +149,32 @@ impl ReplayApp {
         if let Some(session) = &self.session {
             self.viewport.focus(&session.replay, id, self.playback.frame());
         }
+    }
+
+    /// What the panel under the viewport shows.
+    pub fn bottom_tab(&self) -> BottomTab {
+        self.bottom_tab
+    }
+
+    pub fn set_bottom_tab(&mut self, tab: BottomTab) {
+        self.bottom_tab = tab;
+    }
+
+    /// The span of time the graphs show.
+    pub fn time_window(&self) -> &TimeWindow {
+        &self.window
+    }
+
+    pub fn time_window_mut(&mut self) -> &mut TimeWindow {
+        &mut self.window
+    }
+
+    pub fn graphs(&self) -> &GraphView {
+        &self.graphs
+    }
+
+    pub fn graphs_mut(&mut self) -> &mut GraphView {
+        &mut self.graphs
     }
 
     /// The 3D viewport's camera.
@@ -194,6 +238,7 @@ impl ReplayApp {
             if self.playback.advance(&session.replay, dt) || self.playback.is_playing() {
                 ctx.request_repaint();
             }
+            self.window.observe_playhead(self.playback.time(), self.graphs.follow);
         }
 
         if self.title_dirty {
@@ -207,7 +252,7 @@ impl ReplayApp {
 
         self.top_bar(ctx);
 
-        let Self { session, playback, selected, logs, entities, viewport, .. } = self;
+        let Self { session, playback, selected, logs, graphs, bottom_tab, window, entities, viewport, .. } = self;
 
         match session {
             Some(Session { replay, .. }) => {
@@ -220,29 +265,50 @@ impl ReplayApp {
                 let frame = playback.frame();
                 egui::SidePanel::left("entities").default_width(260.0).width_range(160.0..=600.0).show(ctx, |ui| {
                     ui.heading("Entities");
-                    let action = entities.ui(ui, replay, frame, selected, &mut viewport.options.hidden_entities);
+                    let action = entities.ui(
+                        ui,
+                        replay,
+                        frame,
+                        selected,
+                        &mut viewport.options.hidden_entities,
+                        graphs.pinned(),
+                    );
                     if let Some(id) = action.focus {
                         *selected = Some(id);
                         viewport.focus(replay, id, frame);
+                    }
+                    if let Some(id) = action.toggle_pin {
+                        graphs.toggle_pin(id);
+                        *bottom_tab = BottomTab::Graphs;
                     }
                 });
                 egui::SidePanel::right("properties").default_width(320.0).width_range(200.0..=700.0).show(ctx, |ui| {
                     ui.heading("Properties");
                     properties::ui(ui, replay, *selected, frame);
                 });
-                egui::TopBottomPanel::bottom("logs")
+                egui::TopBottomPanel::bottom("bottom")
                     .resizable(true)
-                    .default_height(230.0)
+                    .default_height(260.0)
                     .height_range(80.0..=2000.0)
                     .show(ctx, |ui| {
-                        ui.heading("Logs");
-                        let action = logs.ui(ui, replay, frame, *selected);
-                        if let Some(entity) = action.select {
-                            *selected = Some(entity);
-                        }
-                        if let Some(target) = action.seek_to {
-                            playback.pause();
-                            playback.seek_frame(replay, target);
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(bottom_tab, BottomTab::Logs, RichText::new("Logs").heading())
+                                .on_hover_text("Log entries (L)");
+                            ui.selectable_value(bottom_tab, BottomTab::Graphs, RichText::new("Graphs").heading())
+                                .on_hover_text("Numeric values over time (G)");
+                        });
+                        match bottom_tab {
+                            BottomTab::Logs => {
+                                let action = logs.ui(ui, replay, frame, *selected);
+                                if let Some(entity) = action.select {
+                                    *selected = Some(entity);
+                                }
+                                if let Some(target) = action.seek_to {
+                                    playback.pause();
+                                    playback.seek_frame(replay, target);
+                                }
+                            }
+                            BottomTab::Graphs => graphs.ui(ui, replay, window, playback, selected),
                         }
                     });
                 egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0)).show(
@@ -334,7 +400,14 @@ impl ReplayApp {
         };
         let replay = &session.replay;
         let playback = &mut self.playback;
+        let tab = &mut self.bottom_tab;
         ctx.input_mut(|i| {
+            if i.consume_key(Modifiers::NONE, Key::G) {
+                *tab = BottomTab::Graphs;
+            }
+            if i.consume_key(Modifiers::NONE, Key::L) {
+                *tab = BottomTab::Logs;
+            }
             if i.consume_key(Modifiers::NONE, Key::Space) {
                 playback.toggle(replay);
             }

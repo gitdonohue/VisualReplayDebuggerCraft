@@ -11,8 +11,8 @@ back and forth through it. Existing `.vrd` captures open unchanged.
 ## Status
 
 Early. Working today: opening captures (including truncated ones), the entity tree, a filterable log view,
-entity properties over time, playback controls, and a 3D wgpu viewport (entity geometry, debug draws, paths,
-picking, follow-camera) that runs on desktop and in the browser. Still to come: graphs, timelines and an MCP server.
+entity properties over time, playback controls, a 3D wgpu viewport (entity geometry, debug draws, paths, picking, follow-camera), and graphs
+of recorded values over time. It runs on desktop and in the browser. Still to come: entity timelines and an MCP server.
 
 ## Try it
 
@@ -28,7 +28,11 @@ cargo run -p vrd-cli -- render testdata/sample.vrd --out frame.png --frame 600  
 ```
 
 Drop a `.vrd` file on the window, or use File > Open. Keys: Space play/pause, Left/Right step (Shift for 10),
-Home/End, Page Up/Down previous/next log entry.
+Home/End, Page Up/Down previous/next log entry, G/L graphs/logs.
+
+In the graphs, click to seek, drag the red playhead to scrub, drag elsewhere to pan, scroll to zoom and
+double-click to show everything. The selected entity is graphed; pin entities (button, or right-click in the
+entity tree) to keep them while selecting others.
 
 Format details are in [docs/format.md](docs/format.md); the 3D viewport is described in [docs/viewport.md](docs/viewport.md). Contributor notes are in [AGENTS.md](AGENTS.md).
 

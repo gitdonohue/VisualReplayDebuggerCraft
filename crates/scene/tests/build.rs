@@ -549,3 +549,35 @@ fn the_real_capture_attaches_characters_to_their_entities() {
         .fold(f32::MAX, f32::min);
     assert!(nearest < 3.0, "the player's geometry is {nearest} from the player");
 }
+
+#[test]
+fn meshes_are_always_semi_transparent_but_solid_shapes_are_not() {
+    let tri = |category: &str| {
+        ent(
+            0,
+            1,
+            EntityOp::Mesh {
+                category: category.into(),
+                verts: vec![Point::ZERO, Point::new(1.0, 0.0, 0.0), Point::new(0.0, 1.0, 0.0)],
+                color: Color::RED,
+            },
+        )
+    };
+    let (r, a) = build(vec![
+        define(1, "Nav"),
+        tri(""),
+        sphere(0, 1, "", Color::GREEN),
+        tri("Debug"),
+        sphere(0, 1, "Debug", Color::GREEN),
+    ]);
+    assert_eq!(a.models.len(), 2);
+    let f = frame_of(&r, &a, 0, None, &no_grid());
+    let alpha = |model: usize| f.instances.iter().find(|i| i.model == model).unwrap().tint[3];
+    let mesh = a.models.iter().position(|m| m.translucent).unwrap();
+    let ball = a.models.iter().position(|m| !m.translucent).unwrap();
+    assert!(alpha(mesh) < 0.5 && alpha(ball) == 1.0);
+    // Per-frame draws: the mesh blends, the sphere is solid.
+    assert_eq!(f.translucent.len(), 3);
+    assert!(f.translucent.iter().all(|v| v.color[3] < 0.5));
+    assert!(!f.solid.is_empty() && f.solid.iter().all(|v| v.color[3] == 1.0));
+}

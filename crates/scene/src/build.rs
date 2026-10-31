@@ -74,6 +74,9 @@ pub struct StaticModel {
     pub vertices: Vec<Vertex>,
     pub center: Vec3,
     pub radius: f32,
+    /// Drawn semi-transparent whatever the view options say: triangle meshes (a navmesh, say) usually
+    /// lie over or around other things and would hide them.
+    pub translucent: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -148,7 +151,15 @@ impl SceneAssets {
                 mesh::transform_vertices(&mut vertices, to_local);
                 let (center, radius) = bounding_sphere(vertices.iter().map(|v| Vec3::from(v.position)));
                 assets.models_by_entity.entry(entity.id).or_default().push(assets.models.len());
-                assets.models.push(StaticModel { entity: entity.id, color: draw.color, vertices, center, radius });
+                let translucent = matches!(draw.shape, Shape::Mesh { .. });
+                assets.models.push(StaticModel {
+                    entity: entity.id,
+                    color: draw.color,
+                    vertices,
+                    center,
+                    radius,
+                    translucent,
+                });
             }
         }
         assets.unit = typical_size(replay, &assets);
@@ -377,7 +388,12 @@ pub fn build_frame(req: &FrameRequest) -> SceneFrame {
                 out.instances.push(ModelInstance {
                     model,
                     matrix,
-                    tint: [1.0, 1.0, 1.0, if options.semitransparent { TRANSLUCENT_ALPHA } else { 1.0 }],
+                    tint: [
+                        1.0,
+                        1.0,
+                        1.0,
+                        if options.semitransparent || m.translucent { TRANSLUCENT_ALPHA } else { 1.0 },
+                    ],
                     mix: if is_selected { HIGHLIGHT } else { [0.0; 4] },
                 });
             }
@@ -435,7 +451,6 @@ pub fn build_frame(req: &FrameRequest) -> SceneFrame {
 fn per_frame_draws(req: &FrameRequest, out: &mut SceneFrame) {
     let FrameRequest { replay, frame, options, .. } = *req;
     let start = frame.saturating_sub(options.draw_history_frames as i32).max(0);
-    let alpha = if options.semitransparent { TRANSLUCENT_ALPHA } else { 1.0 };
 
     for d in replay.draws_in(start, frame) {
         if d.is_creation
@@ -446,8 +461,10 @@ fn per_frame_draws(req: &FrameRequest, out: &mut SceneFrame) {
         {
             continue;
         }
-        let color = linear_color(d.color, alpha);
-        let tris = if options.semitransparent { &mut out.translucent } else { &mut out.solid };
+        let is_mesh = matches!(d.shape, Shape::Mesh { .. });
+        let ghost = options.semitransparent || is_mesh;
+        let color = linear_color(d.color, if ghost { TRANSLUCENT_ALPHA } else { 1.0 });
+        let tris = if ghost { &mut out.translucent } else { &mut out.solid };
         match &d.shape {
             Shape::Line { start, end } => {
                 out.lines.push(LineSegment::new(to_vec3(*start), to_vec3(*end), linear_color(d.color, 1.0), 2.0))

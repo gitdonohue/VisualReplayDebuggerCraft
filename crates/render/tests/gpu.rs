@@ -184,6 +184,7 @@ fn registration_models_are_placed_by_their_instance_matrix() {
         vertices,
         center: Vec3::ZERO,
         radius: 60.0,
+        translucent: false,
     });
     g.renderer.set_assets(&assets);
 

@@ -146,6 +146,8 @@ impl Views {
 pub struct Requests {
     /// Show this panel (an entity was pinned and wants a place to be seen).
     pub reveal: Option<Pane>,
+    /// Move this panel out into a window of its own.
+    pub detach: Option<Pane>,
 }
 
 /// Draws each pane with the app's state.
@@ -191,6 +193,13 @@ impl TabViewer for Viewer<'_> {
             _ => {}
         }
         OnCloseResponse::Close
+    }
+
+    fn context_menu(&mut self, ui: &mut Ui, pane: &mut Pane, _: SurfaceIndex, _: NodeIndex) {
+        if *pane != Pane::Viewport && ui.button("Move to a new window").clicked() {
+            self.requests.detach = Some(*pane);
+            ui.close();
+        }
     }
 
     fn scroll_bars(&self, _: &Pane) -> [bool; 2] {
@@ -271,4 +280,36 @@ impl TabViewer for Viewer<'_> {
             }
         });
     }
+}
+
+/// Draws the panes that were moved out of the dock, each in a window of its own (or, where the
+/// platform cannot open more windows, as a floating window). Returns the ones the user closed.
+pub fn show_detached(ctx: &egui::Context, viewer: &mut Viewer<'_>, detached: &[Pane]) -> Vec<Pane> {
+    let mut closed = Vec::new();
+    for &pane in detached {
+        let id = egui::ViewportId::from_hash_of(("detached", pane));
+        let builder = egui::ViewportBuilder::default()
+            .with_title(format!("{} - Visual Replay Debugger", pane.title()))
+            .with_inner_size([820.0, 420.0]);
+        let was_closed = ctx.show_viewport_immediate(id, builder, |ctx, class| {
+            let mut pane = pane;
+            if matches!(class, egui::ViewportClass::Embedded) {
+                let mut open = true;
+                egui::Window::new(pane.title())
+                    .id(Id::new(("detached", pane)))
+                    .open(&mut open)
+                    .default_size([700.0, 360.0])
+                    .show(ctx, |ui| viewer.ui(ui, &mut pane));
+                return !open;
+            }
+            egui::CentralPanel::default()
+                .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0))
+                .show(ctx, |ui| viewer.ui(ui, &mut pane));
+            ctx.input(|i| i.viewport().close_requested())
+        });
+        if was_closed {
+            closed.push(pane);
+        }
+    }
+    closed
 }

@@ -50,6 +50,8 @@ pub struct ReplayApp {
     views: Views,
     /// Where the panels are, and which are open.
     dock: DockState<Pane>,
+    /// Panels moved out of the dock into windows of their own.
+    detached: Vec<Pane>,
     /// The graphs and timelines views that last had focus.
     active_graphs: u32,
     active_timelines: u32,
@@ -72,6 +74,7 @@ impl Default for ReplayApp {
             logs: LogView::default(),
             views: Views::default(),
             dock: dock::default_layout(),
+            detached: Vec::new(),
             active_graphs: 0,
             active_timelines: 0,
             bottom_tab: BottomTab::default(),
@@ -116,6 +119,7 @@ impl ReplayApp {
                 self.logs.reset();
                 self.views.set_replay(&replay);
                 self.dock = dock::default_layout();
+                self.detached.clear();
                 self.active_graphs = 0;
                 self.active_timelines = 0;
                 self.window = TimeWindow::new(replay.total_time());
@@ -180,7 +184,29 @@ impl ReplayApp {
             BottomTab::Graphs => Pane::Graphs(self.active_graphs),
             BottomTab::Timelines => Pane::Timelines(self.active_timelines),
         };
-        dock::reveal(&mut self.dock, pane);
+        if !self.detached.contains(&pane) {
+            dock::reveal(&mut self.dock, pane);
+        }
+    }
+
+    /// Moves a panel out of the dock into a window of its own. Closing that window docks it again.
+    pub fn detach(&mut self, tab: BottomTab) {
+        let pane = match tab {
+            BottomTab::Logs => Pane::Logs,
+            BottomTab::Graphs => Pane::Graphs(self.active_graphs),
+            BottomTab::Timelines => Pane::Timelines(self.active_timelines),
+        };
+        if let Some(location) = self.dock.find_tab(&pane) {
+            self.dock.remove_tab(location);
+        }
+        if !self.detached.contains(&pane) {
+            self.detached.push(pane);
+        }
+    }
+
+    /// How many panels are in windows of their own.
+    pub fn detached_count(&self) -> usize {
+        self.detached.len()
     }
 
     /// Opens another graphs view, with its own settings, and returns its number.
@@ -210,6 +236,7 @@ impl ReplayApp {
     /// Puts the panels back where they start out.
     pub fn reset_layout(&mut self) {
         self.dock = dock::default_layout();
+        self.detached.clear();
         self.views.graphs.retain(|&id, _| id == 0);
         self.views.timelines.retain(|&id, _| id == 0);
         self.active_graphs = 0;
@@ -349,6 +376,7 @@ impl ReplayApp {
             entities,
             viewport,
             dock,
+            detached,
             active_graphs,
             active_timelines,
             ..
@@ -381,7 +409,20 @@ impl ReplayApp {
                 let mut style = egui_dock::Style::from_egui(&ctx.style());
                 style.tab.tab_body.inner_margin = egui::Margin::ZERO;
                 DockArea::new(dock).style(style).show_leaf_close_all_buttons(false).show(ctx, &mut viewer);
-                let requests = viewer.requests;
+                let closed = dock::show_detached(ctx, &mut viewer, detached);
+                let requests = std::mem::take(&mut viewer.requests);
+                for pane in closed {
+                    detached.retain(|p| *p != pane);
+                    dock::reveal(dock, pane);
+                }
+                if let Some(pane) = requests.detach {
+                    if let Some(location) = dock.find_tab(&pane) {
+                        dock.remove_tab(location);
+                    }
+                    if !detached.contains(&pane) {
+                        detached.push(pane);
+                    }
+                }
 
                 if let Some(pane) = requests.reveal {
                     dock::reveal(dock, pane);
@@ -435,9 +476,11 @@ impl ReplayApp {
                 if self.session.is_some() {
                     ui.menu_button("View", |ui| {
                         for pane in [Pane::Entities, Pane::Properties, Pane::Logs] {
-                            let open = self.dock.find_tab(&pane).is_some();
+                            let open = self.dock.find_tab(&pane).is_some() || self.detached.contains(&pane);
                             if ui.selectable_label(open, pane.title()).clicked() {
-                                if open {
+                                if self.detached.contains(&pane) {
+                                    self.detached.retain(|p| *p != pane);
+                                } else if open {
                                     if let Some((surface, node, tab)) = self.dock.find_tab(&pane) {
                                         self.dock.remove_tab((surface, node, tab));
                                     }

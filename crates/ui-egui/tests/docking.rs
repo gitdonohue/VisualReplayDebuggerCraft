@@ -95,3 +95,22 @@ fn every_view_keeps_its_own_pins() {
     assert!(!app.graphs().pins().contains(stats), "a new view starts with nothing pinned");
     assert!(app.graph_view_count() == 2);
 }
+
+#[test]
+fn a_panel_can_live_in_a_window_of_its_own() {
+    let (ctx, mut app) = open();
+    app.set_bottom_tab(BottomTab::Graphs);
+    frames(&ctx, &mut app, 3);
+    app.detach(BottomTab::Graphs);
+    assert_eq!(app.detached_count(), 1);
+    frames(&ctx, &mut app, 3);
+    assert!(app.graphs().rect().is_positive(), "the detached panel is still drawn");
+
+    app.set_bottom_tab(BottomTab::Graphs);
+    frames(&ctx, &mut app, 3);
+    assert_eq!(app.detached_count(), 1, "asking for it does not dock it again");
+
+    app.reset_layout();
+    assert_eq!(app.detached_count(), 0);
+    frames(&ctx, &mut app, 3);
+}

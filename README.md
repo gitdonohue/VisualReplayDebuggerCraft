@@ -38,6 +38,11 @@ double-click to show everything. The selected entity is graphed; pin entities (b
 entity tree) to keep them while selecting others. The timelines tab shows text parameters the same way; see
 [docs/graphs.md](docs/graphs.md) and [docs/timelines.md](docs/timelines.md).
 
+### Using it with an AI assistant
+
+* **Desktop/CLI:** `vrd-cli mcp` is an MCP server that reads captures ([docs/mcp.md](docs/mcp.md)); the skill in `.agents/skills/analyse-vrd-capture` teaches an assistant how to investigate with it.
+* **Browser:** the web version registers [WebMCP](docs/webmcp.md) tools, so a browser's assistant, or a coding agent attached through Chrome DevTools MCP, can query the open capture and drive the view.
+
 Format details are in [docs/format.md](docs/format.md); the 3D viewport is described in [docs/viewport.md](docs/viewport.md). Contributor notes are in [AGENTS.md](AGENTS.md).
 
 ## License

@@ -8,11 +8,13 @@ VisualReplayDebugger is an engine-agnostic visual replay debugging tool for game
 records entities, positions, logs, parameters and debug draws into a `.vrd` capture, and the tool lets you scrub
 back and forth through it. Existing `.vrd` captures open unchanged.
 
+![Visual Replay Debugger showing entity timelines, the 3D viewport, logs, parameter timelines and graphs in a docked layout](docs/images/screenshot.png)
+
 ## Status
 
 Early. Working today: opening captures (including truncated ones), the entity tree, a filterable log view,
 entity properties over time, playback controls, a 3D wgpu viewport (entity geometry, debug draws, paths, picking, follow-camera), and graphs
-of recorded values over time, and timelines of text parameters. It runs on desktop and in the browser. Still to come: an MCP server.
+of recorded values over time, timelines of text parameters, entity timelines (when each entity lived and logged), and dockable panels (several graphs and timelines views, panels can move to their own windows). It runs on desktop and in the browser. Still to come: an MCP server.
 
 ## Try it
 
@@ -28,7 +30,7 @@ cargo run -p vrd-cli -- render testdata/sample.vrd --out frame.png --frame 600  
 ```
 
 Drop a `.vrd` file on the window, or use File > Open. Keys: Space play/pause, Left/Right step (Shift for 10),
-Home/End, Page Up/Down previous/next log entry, L/G/T logs/graphs/timelines.
+Home/End, Page Up/Down previous/next log entry, L/G/T/E logs/graphs/timelines/entity timelines.
 
 In the graphs, click to seek, drag the red playhead to scrub, drag elsewhere to pan, scroll to zoom and
 double-click to show everything. The selected entity is graphed; pin entities (button, or right-click in the

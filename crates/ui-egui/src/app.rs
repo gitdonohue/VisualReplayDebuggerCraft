@@ -1,15 +1,17 @@
 use egui::{Color32, Key, KeyboardShortcut, Modifiers, RichText};
+use egui_dock::{DockArea, DockState};
 use vrd_engine::{Playback, TimeWindow};
 use vrd_model::Replay;
 
+use crate::dock::{self, Pane, Views};
 use crate::entities::EntityTree;
 use crate::graphs::GraphView;
 use crate::loader::{self, Inbox, Incoming};
 use crate::logs::LogView;
 use crate::pins::Pins;
 use crate::timelines::TimelineView;
+use crate::transport;
 use crate::viewport::Viewport;
-use crate::{properties, transport};
 
 const APP_NAME: &str = "Visual Replay Debugger";
 const OPEN_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
@@ -45,8 +47,13 @@ pub struct ReplayApp {
     playback: Playback,
     selected: Option<i32>,
     logs: LogView,
-    graphs: GraphView,
-    timelines: TimelineView,
+    /// The graphs and timelines views, each with its own settings.
+    views: Views,
+    /// Where the panels are, and which are open.
+    dock: DockState<Pane>,
+    /// The graphs and timelines views that last had focus.
+    active_graphs: u32,
+    active_timelines: u32,
     /// Entities kept in the graphs and timelines whatever is selected.
     pins: Pins,
     bottom_tab: BottomTab,
@@ -66,8 +73,10 @@ impl Default for ReplayApp {
             playback: Playback::new(),
             selected: None,
             logs: LogView::default(),
-            graphs: GraphView::default(),
-            timelines: TimelineView::default(),
+            views: Views::default(),
+            dock: dock::default_layout(),
+            active_graphs: 0,
+            active_timelines: 0,
             pins: Pins::default(),
             bottom_tab: BottomTab::default(),
             window: TimeWindow::default(),
@@ -109,8 +118,10 @@ impl ReplayApp {
                 self.playback = playback;
                 self.selected = replay.root_entities().first().copied();
                 self.logs.reset();
-                self.graphs.set_replay(&replay);
-                self.timelines.set_replay(&replay);
+                self.views.set_replay(&replay);
+                self.dock = dock::default_layout();
+                self.active_graphs = 0;
+                self.active_timelines = 0;
                 self.pins.clear();
                 self.window = TimeWindow::new(replay.total_time());
                 self.entities = EntityTree::default();
@@ -166,8 +177,48 @@ impl ReplayApp {
         self.bottom_tab
     }
 
+    /// Shows a panel of this kind, opening it if it was closed.
     pub fn set_bottom_tab(&mut self, tab: BottomTab) {
         self.bottom_tab = tab;
+        let pane = match tab {
+            BottomTab::Logs => Pane::Logs,
+            BottomTab::Graphs => Pane::Graphs(self.active_graphs),
+            BottomTab::Timelines => Pane::Timelines(self.active_timelines),
+        };
+        dock::reveal(&mut self.dock, pane);
+    }
+
+    /// Opens another graphs view, with its own settings, and returns its number.
+    pub fn add_graphs_view(&mut self) -> u32 {
+        let id = self.views.add_graphs(self.session.as_ref().map(|s| &s.replay));
+        self.active_graphs = id;
+        dock::reveal(&mut self.dock, Pane::Graphs(id));
+        id
+    }
+
+    /// Opens another timelines view, with its own settings, and returns its number.
+    pub fn add_timelines_view(&mut self) -> u32 {
+        let id = self.views.add_timelines(self.session.as_ref().map(|s| &s.replay));
+        self.active_timelines = id;
+        dock::reveal(&mut self.dock, Pane::Timelines(id));
+        id
+    }
+
+    pub fn graph_view_count(&self) -> usize {
+        self.views.graphs.len()
+    }
+
+    pub fn timeline_view_count(&self) -> usize {
+        self.views.timelines.len()
+    }
+
+    /// Puts the panels back where they start out.
+    pub fn reset_layout(&mut self) {
+        self.dock = dock::default_layout();
+        self.views.graphs.retain(|&id, _| id == 0);
+        self.views.timelines.retain(|&id, _| id == 0);
+        self.active_graphs = 0;
+        self.active_timelines = 0;
     }
 
     /// The span of time the graphs show.
@@ -179,20 +230,24 @@ impl ReplayApp {
         &mut self.window
     }
 
+    /// The graphs view that last had focus.
     pub fn graphs(&self) -> &GraphView {
-        &self.graphs
+        self.views.graphs.get(&self.active_graphs).unwrap_or(&self.views.graphs[&0])
     }
 
     pub fn graphs_mut(&mut self) -> &mut GraphView {
-        &mut self.graphs
+        let id = if self.views.graphs.contains_key(&self.active_graphs) { self.active_graphs } else { 0 };
+        self.views.graphs.get_mut(&id).expect("the first graphs view always exists")
     }
 
+    /// The timelines view that last had focus.
     pub fn timelines(&self) -> &TimelineView {
-        &self.timelines
+        self.views.timelines.get(&self.active_timelines).unwrap_or(&self.views.timelines[&0])
     }
 
     pub fn timelines_mut(&mut self) -> &mut TimelineView {
-        &mut self.timelines
+        let id = if self.views.timelines.contains_key(&self.active_timelines) { self.active_timelines } else { 0 };
+        self.views.timelines.get_mut(&id).expect("the first timelines view always exists")
     }
 
     /// Pins an entity in the graphs and timelines, or unpins it.
@@ -210,7 +265,7 @@ impl ReplayApp {
             return;
         };
         let t = self.playback.time();
-        if let Some(event) = self.timelines.neighbouring_event(self.selected, &self.pins, t, forward) {
+        if let Some(event) = self.timelines().neighbouring_event(self.selected, &self.pins, t, forward) {
             self.playback.seek_time(&session.replay, event);
         }
     }
@@ -295,13 +350,15 @@ impl ReplayApp {
             playback,
             selected,
             logs,
-            graphs,
-            timelines,
+            views,
             pins,
             bottom_tab,
             window,
             entities,
             viewport,
+            dock,
+            active_graphs,
+            active_timelines,
             ..
         } = self;
 
@@ -313,71 +370,37 @@ impl ReplayApp {
                     ui.add_space(4.0);
                 });
 
-                let frame = playback.frame();
-                egui::SidePanel::left("entities").default_width(260.0).width_range(160.0..=600.0).show(ctx, |ui| {
-                    ui.heading("Entities");
-                    let action = entities.ui(
-                        ui,
-                        replay,
-                        frame,
-                        selected,
-                        &mut viewport.options.hidden_entities,
-                        pins.as_slice(),
-                    );
-                    if let Some(id) = action.focus {
-                        *selected = Some(id);
-                        viewport.focus(replay, id, frame);
-                    }
-                    if let Some(id) = action.toggle_pin {
-                        pins.toggle(id);
-                        // Show the entity where it has something to show.
-                        if *bottom_tab == BottomTab::Logs {
-                            let only_text =
-                                replay.entity(id).is_some_and(|e| e.values.is_empty() && !e.params.is_empty());
-                            *bottom_tab = if only_text { BottomTab::Timelines } else { BottomTab::Graphs };
-                        }
-                    }
-                });
-                egui::SidePanel::right("properties").default_width(320.0).width_range(200.0..=700.0).show(ctx, |ui| {
-                    ui.heading("Properties");
-                    properties::ui(ui, replay, *selected, frame);
-                });
-                egui::TopBottomPanel::bottom("bottom")
-                    .resizable(true)
-                    .default_height(260.0)
-                    .height_range(80.0..=2000.0)
-                    .show(ctx, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.selectable_value(bottom_tab, BottomTab::Logs, RichText::new("Logs").heading())
-                                .on_hover_text("Log entries (L)");
-                            ui.selectable_value(bottom_tab, BottomTab::Graphs, RichText::new("Graphs").heading())
-                                .on_hover_text("Numeric values over time (G)");
-                            ui.selectable_value(bottom_tab, BottomTab::Timelines, RichText::new("Timelines").heading())
-                                .on_hover_text("Text parameters over time (T)");
-                        });
-                        match bottom_tab {
-                            BottomTab::Logs => {
-                                let action = logs.ui(ui, replay, frame, *selected);
-                                if let Some(entity) = action.select {
-                                    *selected = Some(entity);
-                                }
-                                if let Some(target) = action.seek_to {
-                                    playback.pause();
-                                    playback.seek_frame(replay, target);
-                                }
-                            }
-                            BottomTab::Graphs => graphs.ui(ui, replay, window, playback, selected, pins),
-                            BottomTab::Timelines => timelines.ui(ui, replay, window, playback, selected, pins),
-                        }
-                    });
-                egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(0.0)).show(
-                    ctx,
-                    |ui| {
-                        if let Some(id) = viewport.ui(ui, replay, frame, *selected).select {
-                            *selected = Some(id);
-                        }
-                    },
-                );
+                let shown =
+                    dock.iter_leaves().filter_map(|(_, leaf)| leaf.tabs().get(leaf.active.0).copied()).collect();
+                let mut viewer = dock::Viewer {
+                    replay,
+                    playback,
+                    selected,
+                    window,
+                    pins,
+                    entities,
+                    logs,
+                    viewport,
+                    views,
+                    shown: &shown,
+                    requests: dock::Requests::default(),
+                };
+                let mut style = egui_dock::Style::from_egui(&ctx.style());
+                style.tab.tab_body.inner_margin = egui::Margin::ZERO;
+                DockArea::new(dock).style(style).show_leaf_close_all_buttons(false).show(ctx, &mut viewer);
+                let requests = viewer.requests;
+
+                if let Some(pane) = requests.reveal {
+                    dock::reveal(dock, pane);
+                }
+                match dock::focused(dock) {
+                    Some(Pane::Graphs(id)) => *active_graphs = id,
+                    Some(Pane::Timelines(id)) => *active_timelines = id,
+                    _ => {}
+                }
+                if let Some(kind) = dock::focused(dock).and_then(Pane::kind) {
+                    *bottom_tab = kind;
+                }
             }
             None => {
                 let mut open = false;
@@ -416,7 +439,37 @@ impl ReplayApp {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
-
+                if self.session.is_some() {
+                    ui.menu_button("View", |ui| {
+                        for pane in [Pane::Entities, Pane::Properties, Pane::Logs] {
+                            let open = self.dock.find_tab(&pane).is_some();
+                            if ui.selectable_label(open, pane.title()).clicked() {
+                                if open {
+                                    if let Some((surface, node, tab)) = self.dock.find_tab(&pane) {
+                                        self.dock.remove_tab((surface, node, tab));
+                                    }
+                                } else {
+                                    dock::reveal(&mut self.dock, pane);
+                                }
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        if ui.button("New graphs view").clicked() {
+                            self.add_graphs_view();
+                            ui.close();
+                        }
+                        if ui.button("New timelines view").clicked() {
+                            self.add_timelines_view();
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Reset layout").clicked() {
+                            self.reset_layout();
+                            ui.close();
+                        }
+                    });
+                }
                 ui.separator();
                 if let Some(session) = &self.session {
                     let r = &session.replay;
@@ -459,16 +512,16 @@ impl ReplayApp {
         };
         let replay = &session.replay;
         let playback = &mut self.playback;
-        let tab = &mut self.bottom_tab;
+        let mut tab = None;
         ctx.input_mut(|i| {
             if i.consume_key(Modifiers::NONE, Key::G) {
-                *tab = BottomTab::Graphs;
+                tab = Some(BottomTab::Graphs);
             }
             if i.consume_key(Modifiers::NONE, Key::T) {
-                *tab = BottomTab::Timelines;
+                tab = Some(BottomTab::Timelines);
             }
             if i.consume_key(Modifiers::NONE, Key::L) {
-                *tab = BottomTab::Logs;
+                tab = Some(BottomTab::Logs);
             }
             if i.consume_key(Modifiers::NONE, Key::Space) {
                 playback.toggle(replay);
@@ -494,6 +547,9 @@ impl ReplayApp {
                 playback.step_to_previous_log(replay);
             }
         });
+        if let Some(tab) = tab {
+            self.set_bottom_tab(tab);
+        }
     }
 }
 

@@ -4,6 +4,7 @@
 //! in the browser and in headless tests.
 
 mod app;
+mod dock;
 mod entities;
 mod graphs;
 mod loader;

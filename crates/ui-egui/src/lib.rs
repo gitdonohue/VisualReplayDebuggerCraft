@@ -6,6 +6,7 @@
 mod app;
 mod dock;
 mod entities;
+mod entity_timelines;
 mod graphs;
 mod loader;
 mod log_filter;
@@ -20,6 +21,7 @@ mod viewport;
 mod widgets;
 
 pub use app::{BottomTab, ReplayApp};
+pub use entity_timelines::{ENTITY_ROW_HEIGHT, EntityTimelineView};
 pub use graphs::GraphView;
 pub use loader::{Inbox, Incoming};
 pub use log_filter::LogFilter;

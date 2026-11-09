@@ -10,6 +10,7 @@ use vrd_model::Replay;
 
 use crate::app::BottomTab;
 use crate::entities::EntityTree;
+use crate::entity_timelines::EntityTimelineView;
 use crate::graphs::GraphView;
 use crate::logs::LogView;
 use crate::properties;
@@ -25,6 +26,7 @@ pub enum Pane {
     Logs,
     Graphs(u32),
     Timelines(u32),
+    EntityTimelines,
 }
 
 impl Pane {
@@ -34,6 +36,7 @@ impl Pane {
             Pane::Logs => Some(BottomTab::Logs),
             Pane::Graphs(_) => Some(BottomTab::Graphs),
             Pane::Timelines(_) => Some(BottomTab::Timelines),
+            Pane::EntityTimelines => Some(BottomTab::EntityTimelines),
             _ => None,
         }
     }
@@ -48,6 +51,7 @@ impl Pane {
             Pane::Graphs(n) => format!("Graphs {}", n + 1),
             Pane::Timelines(0) => "Timelines".into(),
             Pane::Timelines(n) => format!("Timelines {}", n + 1),
+            Pane::EntityTimelines => "Entity Timelines".into(),
         }
     }
 }
@@ -57,7 +61,11 @@ impl Pane {
 pub fn default_layout() -> DockState<Pane> {
     let mut dock = DockState::new(vec![Pane::Viewport]);
     let tree = dock.main_surface_mut();
-    let [top, _] = tree.split_below(NodeIndex::root(), 0.68, vec![Pane::Logs, Pane::Graphs(0), Pane::Timelines(0)]);
+    let [top, _] = tree.split_below(
+        NodeIndex::root(),
+        0.68,
+        vec![Pane::Logs, Pane::Graphs(0), Pane::Timelines(0), Pane::EntityTimelines],
+    );
     let [middle, _] = tree.split_left(top, 0.2, vec![Pane::Entities]);
     tree.split_right(middle, 0.76, vec![Pane::Properties]);
     dock
@@ -161,6 +169,7 @@ pub struct Viewer<'a> {
     pub active_timelines: u32,
     pub entities: &'a mut EntityTree,
     pub logs: &'a mut LogView,
+    pub entity_timelines: &'a mut EntityTimelineView,
     pub viewport: &'a mut Viewport,
     pub views: &'a mut Views,
     pub shown: &'a BTreeSet<Pane>,
@@ -278,6 +287,14 @@ impl TabViewer for Viewer<'_> {
                     view.ui(ui, replay, self.window, self.playback, self.selected);
                 }
             }
+            Pane::EntityTimelines => self.entity_timelines.ui(
+                ui,
+                replay,
+                self.window,
+                self.playback,
+                self.selected,
+                &mut self.viewport.options.hidden_entities,
+            ),
         });
     }
 }

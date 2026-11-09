@@ -68,6 +68,7 @@ fn run() -> Result<(), String> {
     match value("--tab").as_deref() {
         Some("graphs") => app.set_bottom_tab(BottomTab::Graphs),
         Some("timelines") => app.set_bottom_tab(BottomTab::Timelines),
+        Some("entities") => app.set_bottom_tab(BottomTab::EntityTimelines),
         Some("logs") | None => app.set_bottom_tab(BottomTab::Logs),
         Some(other) => return Err(format!("unknown tab {other}")),
     }
@@ -135,6 +136,7 @@ fn run() -> Result<(), String> {
     let (what, (entities, rows)) = match app.bottom_tab() {
         BottomTab::Graphs => ("graphs", app.graphs().shown()),
         BottomTab::Timelines => ("timelines", app.timelines().shown()),
+        BottomTab::EntityTimelines => ("entities", (app.entity_timelines().shown(), 0)),
         BottomTab::Logs => ("logs", (0, 0)),
     };
     println!("wrote {out} ({}x{}); {what}: {entities} entities, {rows} rows", image.width(), image.height());

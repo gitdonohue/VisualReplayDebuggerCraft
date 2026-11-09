@@ -91,3 +91,17 @@ fn values_on_the_same_frame_keep_the_last_one() {
     assert_eq!(s.values, [2.0, 3.0]);
     assert_eq!(s.value_at(0.5), Some(2.0));
 }
+
+#[test]
+fn the_sample_has_a_lifespan_per_entity_with_its_log_times() {
+    let r = sample();
+    let spans = vrd_graph::lifespans(&r);
+    assert_eq!(spans.len(), r.entity_count());
+    assert!(spans.windows(2).all(|w| w[0].start <= w[1].start), "in the order they appeared");
+    for s in &spans {
+        assert!(s.start <= s.end && s.end <= r.total_time() + 1e-9);
+        assert!(s.events.windows(2).all(|w| w[0] <= w[1]));
+        assert_eq!(s.events.len(), r.entity(s.entity).unwrap().log_frames.len());
+    }
+    assert!(spans.iter().any(|s| !s.events.is_empty()));
+}

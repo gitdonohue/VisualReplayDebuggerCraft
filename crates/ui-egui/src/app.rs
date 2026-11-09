@@ -5,6 +5,7 @@ use vrd_model::Replay;
 
 use crate::dock::{self, Pane, Views};
 use crate::entities::EntityTree;
+use crate::entity_timelines::EntityTimelineView;
 use crate::graphs::GraphView;
 use crate::loader::{self, Inbox, Incoming};
 use crate::logs::LogView;
@@ -22,6 +23,8 @@ pub enum BottomTab {
     Logs,
     Graphs,
     Timelines,
+    /// One row per entity: when it lived and when it logged.
+    EntityTimelines,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,6 +51,7 @@ pub struct ReplayApp {
     logs: LogView,
     /// The graphs and timelines views, each with its own settings.
     views: Views,
+    entity_timelines: EntityTimelineView,
     /// Where the panels are, and which are open.
     dock: DockState<Pane>,
     /// Panels moved out of the dock into windows of their own.
@@ -73,6 +77,7 @@ impl Default for ReplayApp {
             selected: None,
             logs: LogView::default(),
             views: Views::default(),
+            entity_timelines: EntityTimelineView::default(),
             dock: dock::default_layout(),
             detached: Vec::new(),
             active_graphs: 0,
@@ -118,6 +123,7 @@ impl ReplayApp {
                 self.selected = replay.root_entities().first().copied();
                 self.logs.reset();
                 self.views.set_replay(&replay);
+                self.entity_timelines.set_replay(&replay);
                 self.dock = dock::default_layout();
                 self.detached.clear();
                 self.active_graphs = 0;
@@ -183,6 +189,7 @@ impl ReplayApp {
             BottomTab::Logs => Pane::Logs,
             BottomTab::Graphs => Pane::Graphs(self.active_graphs),
             BottomTab::Timelines => Pane::Timelines(self.active_timelines),
+            BottomTab::EntityTimelines => Pane::EntityTimelines,
         };
         if !self.detached.contains(&pane) {
             dock::reveal(&mut self.dock, pane);
@@ -195,6 +202,7 @@ impl ReplayApp {
             BottomTab::Logs => Pane::Logs,
             BottomTab::Graphs => Pane::Graphs(self.active_graphs),
             BottomTab::Timelines => Pane::Timelines(self.active_timelines),
+            BottomTab::EntityTimelines => Pane::EntityTimelines,
         };
         if let Some(location) = self.dock.find_tab(&pane) {
             self.dock.remove_tab(location);
@@ -260,6 +268,15 @@ impl ReplayApp {
     pub fn graphs_mut(&mut self) -> &mut GraphView {
         let id = if self.views.graphs.contains_key(&self.active_graphs) { self.active_graphs } else { 0 };
         self.views.graphs.get_mut(&id).expect("the first graphs view always exists")
+    }
+
+    /// The timelines view that last had focus.
+    pub fn entity_timelines(&self) -> &EntityTimelineView {
+        &self.entity_timelines
+    }
+
+    pub fn entity_timelines_mut(&mut self) -> &mut EntityTimelineView {
+        &mut self.entity_timelines
     }
 
     /// The timelines view that last had focus.
@@ -371,6 +388,7 @@ impl ReplayApp {
             selected,
             logs,
             views,
+            entity_timelines,
             bottom_tab,
             window,
             entities,
@@ -399,6 +417,7 @@ impl ReplayApp {
                     window,
                     entities,
                     logs,
+                    entity_timelines,
                     viewport,
                     views,
                     active_graphs: *active_graphs,
@@ -555,6 +574,9 @@ impl ReplayApp {
             }
             if i.consume_key(Modifiers::NONE, Key::T) {
                 tab = Some(BottomTab::Timelines);
+            }
+            if i.consume_key(Modifiers::NONE, Key::E) {
+                tab = Some(BottomTab::EntityTimelines);
             }
             if i.consume_key(Modifiers::NONE, Key::L) {
                 tab = Some(BottomTab::Logs);

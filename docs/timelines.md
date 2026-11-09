@@ -41,3 +41,15 @@ scrolls the rows instead. Extra:
 * **Parameters** hides parameters by name; the filter box matches names (`a|b`).
 
 The view follows the playhead during playback as in the graphs, and "Follow" is one setting for both tabs.
+
+## Entity timelines
+
+The `Entity Timelines` tab (shortcut `E`) has one row per entity: a light bar where the entity
+existed, grey before and after, and a blue tick for every log entry it wrote. Rows are in the order
+the entities appeared. Ticks that fall in the same pixel are drawn once, so a busy entity stays cheap.
+
+* The dot at the left of a row is an eye: click it to hide or show the entity in the 3D view.
+* Click a name to select the entity. Click, drag and scroll on the bars as on the other time panels
+  (they share one zoom).
+* The toolbar filters by name or path (`a|b`), by entity category, and can leave out entities that
+  never logged anything.

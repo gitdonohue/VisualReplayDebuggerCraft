@@ -1,8 +1,6 @@
 //! `vrd-cli mcp`: a Model Context Protocol server (JSON-RPC 2.0 over stdio, one message per line)
 //! that lets an AI assistant read and analyse `.vrd` captures.
 
-mod tools;
-
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -19,20 +17,7 @@ const SERVER_NAME: &str = "vrd-cli";
 const LATEST_PROTOCOL: &str = "2025-06-18";
 const SUPPORTED_PROTOCOLS: [&str; 4] = ["2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 
-/// A tool call that went wrong in a way the assistant can read and correct.
-pub struct ToolError(pub String);
-
-impl From<String> for ToolError {
-    fn from(message: String) -> Self {
-        ToolError(message)
-    }
-}
-
-impl From<&str> for ToolError {
-    fn from(message: &str) -> Self {
-        ToolError(message.to_string())
-    }
-}
+pub use vrd_analysis::ToolError;
 
 struct Loaded {
     modified: Option<SystemTime>,
@@ -82,7 +67,7 @@ impl Server {
         let result = match method {
             "initialize" => Ok(initialize(&params)),
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tools::definitions() })),
+            "tools/list" => Ok(json!({ "tools": vrd_analysis::definitions(true) })),
             "tools/call" => Ok(self.call(&params)),
             "resources/list" => Ok(json!({ "resources": [] })),
             "prompts/list" => Ok(json!({ "prompts": [] })),
@@ -99,7 +84,11 @@ impl Server {
             return tool_result(Err("tools/call needs a tool name".into()));
         };
         let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
-        tool_result(tools::call(self, name, &arguments))
+        let Some(path) = arguments.get("path").and_then(Value::as_str) else {
+            return tool_result(Err("the `path` argument is required".into()));
+        };
+        let outcome = self.capture(path).and_then(|replay| vrd_analysis::call(replay, name, &arguments));
+        tool_result(outcome)
     }
 }
 

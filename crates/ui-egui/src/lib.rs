@@ -4,6 +4,7 @@
 //! in the browser and in headless tests.
 
 mod app;
+mod bridge;
 mod dock;
 mod entities;
 mod entity_timelines;
@@ -21,6 +22,7 @@ mod viewport;
 mod widgets;
 
 pub use app::{BottomTab, ReplayApp};
+pub use bridge::Bridge;
 pub use entity_timelines::{ENTITY_ROW_HEIGHT, EntityTimelineView};
 pub use graphs::GraphView;
 pub use loader::{Inbox, Incoming};

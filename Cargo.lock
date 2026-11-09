@@ -2627,12 +2627,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vrd-analysis"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "vrd-format",
+ "vrd-model",
+]
+
+[[package]]
 name = "vrd-cli"
 version = "0.1.0"
 dependencies = [
  "png",
  "pollster 1.0.1",
  "serde_json",
+ "vrd-analysis",
  "vrd-engine",
  "vrd-format",
  "vrd-model",
@@ -2703,6 +2713,8 @@ dependencies = [
  "egui_extras",
  "pollster 1.0.1",
  "rfd",
+ "serde_json",
+ "vrd-analysis",
  "vrd-engine",
  "vrd-format",
  "vrd-graph",
@@ -2719,6 +2731,7 @@ dependencies = [
  "eframe",
  "egui",
  "js-sys",
+ "serde_json",
  "vrd-ui-egui",
  "wasm-bindgen",
  "wasm-bindgen-futures",

@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 vrd-format.workspace = true
 vrd-model.workspace = true
+vrd-analysis.workspace = true
 vrd-engine.workspace = true
 vrd-scene = { version = "0.1.0", path = "../../crates/scene" }
 vrd-render = { version = "0.1.0", path = "../../crates/render" }

@@ -12,6 +12,7 @@ tool) and `C:\Projects\solidcraft`.
 * `crates/scene`: CPU side of the 3D viewport (camera, tessellation, `build_frame`, picking). No GPU code, fully unit tested.
 * `crates/render`: wgpu renderer that draws a `SceneFrame` into an offscreen texture. Headless GPU tests read pixels back.
 * `crates/ui-egui`: the UI (`ReplayApp`), backend-agnostic so it runs natively, on the web and in tests. `viewport.rs` is the 3D panel, `graphs.rs` the graphs, `timelines.rs` the parameter timelines. `timeaxis.rs` is the ruler and mouse handling they share; `widgets.rs`/`pins.rs` the shared drawing helpers and pinned entities.
+* `crates/analysis`: the questions an assistant can ask of a capture (tools as JSON in, JSON out), shared by the MCP server and the browser's WebMCP tools. No file or UI code.
 * `apps/vrd` desktop (eframe + wgpu), `apps/vrd-web` browser (trunk), `apps/vrd-cli` inspect/convert.
 * `testdata/sample.vrd`: a real capture used by tests.
 
@@ -43,4 +44,4 @@ Captures carry no units or axis conventions, so the viewport detects them (`docs
 * Headless UI tests must feed egui a simulated clock (`RawInput::time`): double-clicks are timed by it, and a debug build is too slow for wall-clock time. See `tests/timelines.rs`.
 
 ## Skills
-* `.agents/skills/analyse-vrd-capture` teaches an assistant how to investigate a capture with the MCP tools (`docs/mcp.md`). Update it when the tools change.
+* `.agents/skills/analyse-vrd-capture` teaches an assistant how to investigate a capture with the MCP tools (`docs/mcp.md`). Update it when the tools change. The browser's WebMCP tools are described in `docs/webmcp.md` (`bridge.rs` in `ui-egui`, `webmcp.rs` in `vrd-web`).

@@ -1,8 +1,11 @@
+use std::rc::Rc;
+
 use egui::{Color32, Key, KeyboardShortcut, Modifiers, RichText};
 use egui_dock::{DockArea, DockState};
 use vrd_engine::{Playback, TimeWindow};
 use vrd_model::Replay;
 
+use crate::bridge::{self, Bridge, Command, Status};
 use crate::dock::{self, Pane, Views};
 use crate::entities::EntityTree;
 use crate::entity_timelines::EntityTimelineView;
@@ -40,7 +43,7 @@ struct Notice {
 
 struct Session {
     name: String,
-    replay: Replay,
+    replay: Rc<Replay>,
 }
 
 /// The whole replay debugger UI. Hosts (desktop, web, tests) call [`ReplayApp::ui`] once per frame.
@@ -65,6 +68,7 @@ pub struct ReplayApp {
     entities: EntityTree,
     viewport: Viewport,
     inbox: Inbox,
+    bridge: Bridge,
     notice: Option<Notice>,
     title_dirty: bool,
 }
@@ -87,6 +91,7 @@ impl Default for ReplayApp {
             entities: EntityTree::default(),
             viewport: Viewport::default(),
             inbox: Inbox::default(),
+            bridge: Bridge::default(),
             notice: None,
             title_dirty: true,
         }
@@ -131,6 +136,8 @@ impl ReplayApp {
                 self.window = TimeWindow::new(replay.total_time());
                 self.entities = EntityTree::default();
                 self.viewport.set_replay(&replay);
+                let replay = Rc::new(replay);
+                self.bridge.set_replay(&name, replay.clone());
                 self.session = Some(Session { name, replay });
                 self.title_dirty = true;
             }
@@ -147,6 +154,11 @@ impl ReplayApp {
     /// Enables 3D rendering with the host's wgpu device. Without this the viewport shows a notice.
     pub fn attach_wgpu(&mut self, state: egui_wgpu::RenderState) {
         self.viewport.attach_gpu(state);
+    }
+
+    /// A handle for agent tools (WebMCP in the browser) to ask questions and drive the view.
+    pub fn bridge(&self) -> Bridge {
+        self.bridge.clone()
     }
 
     /// A handle other threads or async tasks can use to hand this app a capture to open.
@@ -219,7 +231,7 @@ impl ReplayApp {
 
     /// Opens another graphs view, with its own settings, and returns its number.
     pub fn add_graphs_view(&mut self) -> u32 {
-        let id = self.views.add_graphs(self.session.as_ref().map(|s| &s.replay));
+        let id = self.views.add_graphs(self.session.as_ref().map(|s| &*s.replay));
         self.active_graphs = id;
         dock::reveal(&mut self.dock, Pane::Graphs(id));
         id
@@ -227,7 +239,7 @@ impl ReplayApp {
 
     /// Opens another timelines view, with its own settings, and returns its number.
     pub fn add_timelines_view(&mut self) -> u32 {
-        let id = self.views.add_timelines(self.session.as_ref().map(|s| &s.replay));
+        let id = self.views.add_timelines(self.session.as_ref().map(|s| &*s.replay));
         self.active_timelines = id;
         dock::reveal(&mut self.dock, Pane::Timelines(id));
         id
@@ -313,7 +325,7 @@ impl ReplayApp {
     }
 
     pub fn replay(&self) -> Option<&Replay> {
-        self.session.as_ref().map(|s| &s.replay)
+        self.session.as_ref().map(|s| &*s.replay)
     }
 
     pub fn playback(&self) -> &Playback {
@@ -361,6 +373,8 @@ impl ReplayApp {
             self.receive(loader::read_dropped(file));
         }
 
+        self.bridge.set_context(ctx);
+        self.run_commands();
         self.handle_keys(ctx);
 
         if let Some(session) = &self.session {
@@ -476,6 +490,50 @@ impl ReplayApp {
         }
 
         drop_overlay(ctx);
+        self.publish_status();
+    }
+
+    /// Does what agents asked for through the [Bridge].
+    fn run_commands(&mut self) {
+        for command in self.bridge.take_commands() {
+            let Some(replay) = self.session.as_ref().map(|s| s.replay.clone()) else {
+                continue;
+            };
+            match command {
+                Command::SeekFrame(frame) => self.seek_frame(frame),
+                Command::SeekTime(t) => {
+                    self.playback.pause();
+                    self.playback.seek_time(&replay, t);
+                }
+                Command::Select(id) => self.selected = id,
+                Command::Focus(id) => self.focus_entity(id),
+                Command::Panel(tab) => self.set_bottom_tab(tab),
+                Command::Play(true) => self.playback.play(&replay),
+                Command::Play(false) => self.playback.pause(),
+                Command::Speed(speed) => self.playback.set_speed(speed),
+                Command::TogglePin(id) => self.toggle_pin(id),
+                Command::Window(Some((start, end))) => {
+                    self.window.follow = false;
+                    self.window.set(start, end);
+                }
+                Command::Window(None) => self.window.fill(),
+            }
+        }
+    }
+
+    /// Tells the [Bridge] what is on screen, for agents that ask.
+    fn publish_status(&self) {
+        if self.session.is_some() {
+            self.bridge.publish(Status {
+                frame: self.playback.frame(),
+                time: self.playback.time(),
+                playing: self.playback.is_playing(),
+                speed: self.playback.speed(),
+                selected: self.selected,
+                panel: bridge::panel_name(self.bottom_tab),
+                window: (self.window.start(), self.window.end()),
+            });
+        }
     }
 
     fn top_bar(&mut self, ctx: &egui::Context) {

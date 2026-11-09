@@ -13,6 +13,8 @@ egui-wgpu = { version = "0.33.3", default-features = false }
 egui_dock = "0.18.0"
 egui_extras = { version = "0.33.3", default-features = false }
 rfd = "0.17.2"
+serde_json = "1"
+vrd-analysis.workspace = true
 vrd-engine = { version = "0.1.0", path = "../engine" }
 vrd-graph = { version = "0.1.0", path = "../graph" }
 vrd-model = { version = "0.1.0", path = "../model" }

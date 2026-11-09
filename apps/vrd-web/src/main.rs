@@ -3,6 +3,9 @@
 //! Open `index.html?url=sample.vrd` to load a capture over HTTP at startup.
 
 #[cfg(target_arch = "wasm32")]
+mod webmcp;
+
+#[cfg(target_arch = "wasm32")]
 mod web {
     use eframe::wasm_bindgen::JsCast as _;
     use vrd_ui_egui::{Inbox, Incoming, ReplayApp};
@@ -35,6 +38,7 @@ mod web {
                         if let Some(state) = cc.wgpu_render_state.clone() {
                             app.attach_wgpu(state);
                         }
+                        crate::webmcp::register(&app.bridge());
                         if let Some(url) = url_param() {
                             wasm_bindgen_futures::spawn_local(fetch_into(url, app.inbox(), cc.egui_ctx.clone()));
                         }

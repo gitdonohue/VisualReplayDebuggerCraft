@@ -13,6 +13,7 @@ repository = "https://github.com/gitdonohue/VisualReplayDebugger"
 [workspace.dependencies]
 vrd-format = { path = "crates/format" }
 vrd-model = { path = "crates/model" }
+vrd-analysis = { path = "crates/analysis" }
 vrd-engine = { path = "crates/engine" }
 vrd-scene = { path = "crates/scene" }
 vrd-ui-egui = { path = "crates/ui-egui" }

@@ -5,7 +5,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 use vrd_model::{Entity, FrameList, LogEntry, Point, Replay};
 
-use super::{Server, ToolError};
+/// A tool call that went wrong in a way the assistant can read and correct.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolError(pub String);
+
+impl From<String> for ToolError {
+    fn from(message: String) -> Self {
+        ToolError(message)
+    }
+}
+
+impl From<&str> for ToolError {
+    fn from(message: &str) -> Self {
+        ToolError(message.to_string())
+    }
+}
 
 const MAX_LIMIT: usize = 1000;
 
@@ -31,7 +45,24 @@ fn merge(a: &Value, b: &Value) -> Value {
     Value::Object(m)
 }
 
-pub fn definitions() -> Vec<Value> {
+/// The tools and their JSON schemas. with_path: each takes the path of a capture to read (the MCP
+/// server); without it the tools act on whichever capture the host has open.
+pub fn definitions(with_path: bool) -> Vec<Value> {
+    let mut all = tool_definitions();
+    if !with_path {
+        for tool in &mut all {
+            if let Some(properties) = tool["inputSchema"]["properties"].as_object_mut() {
+                properties.remove("path");
+            }
+            if let Some(required) = tool["inputSchema"]["required"].as_array_mut() {
+                required.retain(|r| r != "path");
+            }
+        }
+    }
+    all
+}
+
+fn tool_definitions() -> Vec<Value> {
     let entity =
         json!({ "entity": { "description": "Entity id (number) or name/path (text; a unique part of it is enough)" } });
     let range = json!({
@@ -150,12 +181,11 @@ pub fn definitions() -> Vec<Value> {
     ]
 }
 
-pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {
-    let path = str_arg(args, "path").ok_or("the `path` argument is required")?.to_string();
-    if !definitions().iter().any(|d| d["name"] == name) {
+/// Runs the tool `name` on `replay`.
+pub fn call(replay: &Replay, name: &str, args: &Value) -> Outcome {
+    if !tool_definitions().iter().any(|d| d["name"] == name) {
         return Err(format!("unknown tool `{name}`").into());
     }
-    let replay = server.capture(&path)?;
     match name {
         "capture_info" => Ok(capture_info(replay)),
         "list_entities" => Ok(list_entities(replay, args)),
@@ -168,6 +198,11 @@ pub fn call(server: &mut Server, name: &str, args: &Value) -> Outcome {
         "get_trajectory" => get_trajectory(replay, args),
         _ => get_frame(replay, args),
     }
+}
+
+/// The id of the entity a JSON value names: an id, or text matching a name or path.
+pub fn resolve_entity(r: &Replay, value: &Value) -> Result<i32, ToolError> {
+    entity_arg(r, &json!({ "entity": value })).map(|e| e.id)
 }
 
 // Arguments and values
@@ -686,4 +721,21 @@ fn get_frame(r: &Replay, args: &Value) -> Outcome {
         })).collect::<Vec<_>>(),
         "debug_draws_by_category": draws,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_path_argument_is_only_for_hosts_that_read_files() {
+        for tool in definitions(true) {
+            assert!(tool["inputSchema"]["properties"].get("path").is_some());
+            assert!(tool["inputSchema"]["required"].as_array().unwrap().iter().any(|r| r == "path"));
+        }
+        for tool in definitions(false) {
+            assert!(tool["inputSchema"]["properties"].get("path").is_none());
+            assert!(tool["inputSchema"]["required"].as_array().unwrap().iter().all(|r| r != "path"));
+        }
+    }
 }

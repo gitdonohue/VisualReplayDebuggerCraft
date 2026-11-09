@@ -14,9 +14,10 @@ vrd-ui-egui.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3.106"
+serde_json = "1"
 wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.79"
-web-sys = { version = "0.3.106", features = ["Window", "Location", "UrlSearchParams", "Response", "Request", "RequestInit"] }
+web-sys = { version = "0.3.106", features = ["console", "Window", "Location", "UrlSearchParams", "Response", "Request", "RequestInit"] }
 # WebGPU where the browser has it, WebGL2 otherwise.
 wgpu = { version = "27", default-features = false, features = ["webgpu", "webgl", "wgsl"] }
 

@@ -14,7 +14,7 @@ back and forth through it. Existing `.vrd` captures open unchanged.
 
 Early. Working today: opening captures (including truncated ones), the entity tree, a filterable log view,
 entity properties over time, playback controls, a 3D wgpu viewport (entity geometry, debug draws, paths, picking, follow-camera), and graphs
-of recorded values over time, timelines of text parameters, entity timelines (when each entity lived and logged), and dockable panels (several graphs and timelines views, panels can move to their own windows). It runs on desktop and in the browser. There is also an [MCP server](docs/mcp.md) so AI assistants can read and analyse captures.
+of recorded values over time, timelines of text parameters, entity timelines (when each entity lived and logged), and dockable panels (several graphs and timelines views, panels can move to their own windows). It runs on desktop and in the browser. There is also an [MCP server](docs/mcp.md) so AI assistants can read and analyse captures, and the web version offers the same tools, plus ones that drive the view, to a browser's assistant through [WebMCP](docs/webmcp.md).
 
 ## Try it
 

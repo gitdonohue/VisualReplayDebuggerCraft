@@ -197,10 +197,6 @@ impl TabViewer for Viewer<'_> {
         [false, false]
     }
 
-    fn clear_background(&self, pane: &Pane) -> bool {
-        *pane != Pane::Viewport
-    }
-
     fn ui(&mut self, ui: &mut Ui, pane: &mut Pane) {
         let frame = self.playback.frame();
         let replay = self.replay;

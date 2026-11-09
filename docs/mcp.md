@@ -47,3 +47,7 @@ comes with its time in seconds. Lists are paged with `limit` and `offset`.
 
 Mistakes (a missing file, an unknown entity or series) come back as tool errors with the choices that exist, so
 the assistant can correct itself. Results are also returned as `structuredContent`.
+
+## Skill
+
+The repository includes a skill, `.agents/skills/analyse-vrd-capture`, with the method and playbooks for using these tools (what happened, why an entity did something, performance hitches, movement). Copy it to your assistant's skills folder (for example `~/.claude/skills` or `.opencode/skills`) to use it.

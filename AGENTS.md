@@ -41,3 +41,5 @@ Captures carry no units or axis conventions, so the viewport detects them (`docs
 * `tools/screenshot` is deliberately outside the workspace: `egui_kittest` enables egui's `accesskit` feature, which through feature unification breaks the desktop app's `egui-winit`. Keep it there.
 * egui reports a drag only after the pointer has moved; use `pointer.press_origin()` to decide what a drag is for.
 * Headless UI tests must feed egui a simulated clock (`RawInput::time`): double-clicks are timed by it, and a debug build is too slow for wall-clock time. See `tests/timelines.rs`.
+## Skills
+* `.agents/skills/analyse-vrd-capture` teaches an assistant how to investigate a capture with the MCP tools (`docs/mcp.md`). Update it when the tools change.

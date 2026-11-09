@@ -8,7 +8,6 @@ use crate::entities::EntityTree;
 use crate::graphs::GraphView;
 use crate::loader::{self, Inbox, Incoming};
 use crate::logs::LogView;
-use crate::pins::Pins;
 use crate::timelines::TimelineView;
 use crate::transport;
 use crate::viewport::Viewport;
@@ -54,8 +53,6 @@ pub struct ReplayApp {
     /// The graphs and timelines views that last had focus.
     active_graphs: u32,
     active_timelines: u32,
-    /// Entities kept in the graphs and timelines whatever is selected.
-    pins: Pins,
     bottom_tab: BottomTab,
     /// The span of time the graphs show.
     window: TimeWindow,
@@ -77,7 +74,6 @@ impl Default for ReplayApp {
             dock: dock::default_layout(),
             active_graphs: 0,
             active_timelines: 0,
-            pins: Pins::default(),
             bottom_tab: BottomTab::default(),
             window: TimeWindow::default(),
             entities: EntityTree::default(),
@@ -122,7 +118,6 @@ impl ReplayApp {
                 self.dock = dock::default_layout();
                 self.active_graphs = 0;
                 self.active_timelines = 0;
-                self.pins.clear();
                 self.window = TimeWindow::new(replay.total_time());
                 self.entities = EntityTree::default();
                 self.viewport.set_replay(&replay);
@@ -250,13 +245,11 @@ impl ReplayApp {
         self.views.timelines.get_mut(&id).expect("the first timelines view always exists")
     }
 
-    /// Pins an entity in the graphs and timelines, or unpins it.
+    /// Pins an entity in the graphs and timelines views that last had focus, or unpins it. Every view
+    /// keeps its own pins.
     pub fn toggle_pin(&mut self, entity: i32) {
-        self.pins.toggle(entity);
-    }
-
-    pub fn pins(&self) -> &Pins {
-        &self.pins
+        self.graphs_mut().pins_mut().toggle(entity);
+        self.timelines_mut().pins_mut().toggle(entity);
     }
 
     /// Moves the playhead to the next or previous change of what the timelines show.
@@ -265,7 +258,7 @@ impl ReplayApp {
             return;
         };
         let t = self.playback.time();
-        if let Some(event) = self.timelines().neighbouring_event(self.selected, &self.pins, t, forward) {
+        if let Some(event) = self.timelines().neighbouring_event(self.selected, self.timelines().pins(), t, forward) {
             self.playback.seek_time(&session.replay, event);
         }
     }
@@ -351,7 +344,6 @@ impl ReplayApp {
             selected,
             logs,
             views,
-            pins,
             bottom_tab,
             window,
             entities,
@@ -377,11 +369,12 @@ impl ReplayApp {
                     playback,
                     selected,
                     window,
-                    pins,
                     entities,
                     logs,
                     viewport,
                     views,
+                    active_graphs: *active_graphs,
+                    active_timelines: *active_timelines,
                     shown: &shown,
                     requests: dock::Requests::default(),
                 };

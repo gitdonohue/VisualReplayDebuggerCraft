@@ -268,7 +268,7 @@ fn pinning_keeps_an_entity_across_selections_in_both_panels() {
     app.set_bottom_tab(BottomTab::Graphs);
     frame(&ctx, &mut app, vec![]);
     assert_eq!(app.graphs().shown(), (1, 2), "the player has numbers too, so the same pin shows in the graphs");
-    assert!(app.pins().contains(player));
+    assert!(app.timelines().pins().contains(player));
 
     app.toggle_pin(player);
     app.set_bottom_tab(BottomTab::Timelines);

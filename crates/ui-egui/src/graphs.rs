@@ -33,6 +33,7 @@ pub struct GraphView {
     pub filled: bool,
     pub ignore_outliers: bool,
     pub filter: String,
+    pins: Pins,
     data: GraphData,
     input: TimeInput,
     rect: Rect,
@@ -46,6 +47,7 @@ impl Default for GraphView {
             filled: true,
             ignore_outliers: false,
             filter: String::new(),
+            pins: Pins::default(),
             data: GraphData::default(),
             input: TimeInput::default(),
             rect: Rect::NOTHING,
@@ -57,6 +59,7 @@ impl Default for GraphView {
 impl GraphView {
     pub fn set_replay(&mut self, replay: &Replay) {
         self.data = GraphData::build(replay);
+        self.pins.clear();
         self.input = TimeInput::default();
     }
 
@@ -74,7 +77,30 @@ impl GraphView {
         self.shown
     }
 
+    /// Draws the view. Its pins are its own, not shared with other views.
     pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        replay: &Replay,
+        window: &mut TimeWindow,
+        playback: &mut Playback,
+        selected: &mut Option<i32>,
+    ) {
+        let mut pins = std::mem::take(&mut self.pins);
+        self.show(ui, replay, window, playback, selected, &mut pins);
+        self.pins = pins;
+    }
+
+    /// The entities kept in this view whatever is selected.
+    pub fn pins(&self) -> &Pins {
+        &self.pins
+    }
+
+    pub fn pins_mut(&mut self) -> &mut Pins {
+        &mut self.pins
+    }
+
+    fn show(
         &mut self,
         ui: &mut egui::Ui,
         replay: &Replay,

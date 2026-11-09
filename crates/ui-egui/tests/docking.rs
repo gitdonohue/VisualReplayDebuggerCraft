@@ -80,3 +80,18 @@ fn closed_panels_come_back_when_asked_for() {
     frames(&ctx, &mut app, 3);
     assert_eq!(app.bottom_tab(), BottomTab::Timelines);
 }
+
+#[test]
+fn every_view_keeps_its_own_pins() {
+    let (ctx, mut app) = open();
+    let stats = app.selected().unwrap();
+    app.set_bottom_tab(BottomTab::Graphs);
+    frames(&ctx, &mut app, 3);
+    app.graphs_mut().pins_mut().toggle(stats);
+    assert!(app.graphs().pins().contains(stats));
+
+    app.add_graphs_view();
+    frames(&ctx, &mut app, 3);
+    assert!(!app.graphs().pins().contains(stats), "a new view starts with nothing pinned");
+    assert!(app.graph_view_count() == 2);
+}

@@ -48,6 +48,7 @@ pub struct TimelineView {
     /// Leave out rows whose value never changes.
     pub changes_only: bool,
     pub filter: String,
+    pins: Pins,
     hidden: BTreeSet<String>,
     data: TimelineData,
     input: TimeInput,
@@ -61,6 +62,7 @@ impl Default for TimelineView {
             by_depth: true,
             changes_only: false,
             filter: String::new(),
+            pins: Pins::default(),
             hidden: BTreeSet::new(),
             data: TimelineData::default(),
             input: TimeInput::default(),
@@ -74,6 +76,7 @@ impl TimelineView {
     pub fn set_replay(&mut self, replay: &Replay) {
         self.data = TimelineData::build(replay);
         self.hidden.clear();
+        self.pins.clear();
         self.input = TimeInput::default();
     }
 
@@ -116,7 +119,30 @@ impl TimelineView {
         )
     }
 
+    /// Draws the view. Its pins are its own, not shared with other views.
     pub fn ui(
+        &mut self,
+        ui: &mut Ui,
+        replay: &Replay,
+        window: &mut TimeWindow,
+        playback: &mut Playback,
+        selected: &mut Option<i32>,
+    ) {
+        let mut pins = std::mem::take(&mut self.pins);
+        self.show(ui, replay, window, playback, selected, &mut pins);
+        self.pins = pins;
+    }
+
+    /// The entities kept in this view whatever is selected.
+    pub fn pins(&self) -> &Pins {
+        &self.pins
+    }
+
+    pub fn pins_mut(&mut self) -> &mut Pins {
+        &mut self.pins
+    }
+
+    fn show(
         &mut self,
         ui: &mut Ui,
         replay: &Replay,

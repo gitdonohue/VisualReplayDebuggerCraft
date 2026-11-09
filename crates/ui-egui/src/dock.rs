@@ -12,7 +12,6 @@ use crate::app::BottomTab;
 use crate::entities::EntityTree;
 use crate::graphs::GraphView;
 use crate::logs::LogView;
-use crate::pins::Pins;
 use crate::properties;
 use crate::timelines::TimelineView;
 use crate::viewport::Viewport;
@@ -155,7 +154,9 @@ pub struct Viewer<'a> {
     pub playback: &'a mut Playback,
     pub selected: &'a mut Option<i32>,
     pub window: &'a mut TimeWindow,
-    pub pins: &'a mut Pins,
+    /// The graphs and timelines views that last had focus: pins from the entity list go there.
+    pub active_graphs: u32,
+    pub active_timelines: u32,
     pub entities: &'a mut EntityTree,
     pub logs: &'a mut LogView,
     pub viewport: &'a mut Viewport,
@@ -213,24 +214,40 @@ impl TabViewer for Viewer<'_> {
         egui::Frame::new().inner_margin(4.0).show(ui, |ui| match *pane {
             Pane::Viewport => {}
             Pane::Entities => {
+                let mut pinned = Vec::new();
+                if let Some(view) = self.views.graphs.get(&self.active_graphs) {
+                    pinned.extend_from_slice(view.pins().as_slice());
+                }
+                if let Some(view) = self.views.timelines.get(&self.active_timelines) {
+                    pinned.extend_from_slice(view.pins().as_slice());
+                }
                 let action = self.entities.ui(
                     ui,
                     replay,
                     frame,
                     self.selected,
                     &mut self.viewport.options.hidden_entities,
-                    self.pins.as_slice(),
+                    &pinned,
                 );
                 if let Some(id) = action.focus {
                     *self.selected = Some(id);
                     self.viewport.focus(replay, id, frame);
                 }
                 if let Some(id) = action.toggle_pin {
-                    self.pins.toggle(id);
-                    // Show the entity where it has something to show.
+                    // Pin it in the view where it has something to show: the one that last had focus.
                     let only_text = replay.entity(id).is_some_and(|e| e.values.is_empty() && !e.params.is_empty());
-                    let wanted = if only_text { self.views.first_timelines() } else { self.views.first_graphs() };
-                    if !self.shown.iter().any(|p| p.kind() == wanted.kind()) {
+                    let wanted = if only_text {
+                        if let Some(view) = self.views.timelines.get_mut(&self.active_timelines) {
+                            view.pins_mut().toggle(id);
+                        }
+                        Pane::Timelines(self.active_timelines)
+                    } else {
+                        if let Some(view) = self.views.graphs.get_mut(&self.active_graphs) {
+                            view.pins_mut().toggle(id);
+                        }
+                        Pane::Graphs(self.active_graphs)
+                    };
+                    if !self.shown.contains(&wanted) {
                         self.requests.reveal = Some(wanted);
                     }
                 }
@@ -248,24 +265,14 @@ impl TabViewer for Viewer<'_> {
             }
             Pane::Graphs(id) => {
                 if let Some(view) = self.views.graphs.get_mut(&id) {
-                    view.ui(ui, replay, self.window, self.playback, self.selected, self.pins);
+                    view.ui(ui, replay, self.window, self.playback, self.selected);
                 }
             }
             Pane::Timelines(id) => {
                 if let Some(view) = self.views.timelines.get_mut(&id) {
-                    view.ui(ui, replay, self.window, self.playback, self.selected, self.pins);
+                    view.ui(ui, replay, self.window, self.playback, self.selected);
                 }
             }
         });
-    }
-}
-
-impl Views {
-    fn first_graphs(&self) -> Pane {
-        Pane::Graphs(self.graphs.keys().next().copied().unwrap_or(0))
-    }
-
-    fn first_timelines(&self) -> Pane {
-        Pane::Timelines(self.timelines.keys().next().copied().unwrap_or(0))
     }
 }

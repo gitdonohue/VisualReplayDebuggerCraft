@@ -1,3 +1,4 @@
+mod mcp;
 mod render;
 
 use std::process::ExitCode;
@@ -15,6 +16,7 @@ USAGE:
     vrd-cli convert <in> <out> [--raw]  Rewrite a capture (deflate-compressed unless --raw)
 ";
 const RENDER_HELP: &str = render::USAGE;
+const MCP_HELP: &str = mcp::USAGE;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,12 +49,13 @@ fn run(args: &[String]) -> Result<(), String> {
             entities(path, frame)
         }
         Some("render") => render::run(&args[1..]),
+        Some("mcp") => mcp::run(&args[1..]),
         Some("convert") => {
             let (input, output) = (args.get(1).ok_or(USAGE)?, args.get(2).ok_or(USAGE)?);
             convert(input, output, args.iter().any(|a| a == "--raw"))
         }
         Some("-h" | "--help" | "help") | None => {
-            println!("{USAGE}{RENDER_HELP}");
+            println!("{USAGE}{RENDER_HELP}{MCP_HELP}");
             Ok(())
         }
         Some(other) => Err(format!("unknown command `{other}`\n\n{USAGE}")),

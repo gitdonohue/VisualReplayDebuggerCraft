@@ -14,7 +14,7 @@ back and forth through it. Existing `.vrd` captures open unchanged.
 
 Early. Working today: opening captures (including truncated ones), the entity tree, a filterable log view,
 entity properties over time, playback controls, a 3D wgpu viewport (entity geometry, debug draws, paths, picking, follow-camera), and graphs
-of recorded values over time, timelines of text parameters, entity timelines (when each entity lived and logged), and dockable panels (several graphs and timelines views, panels can move to their own windows). It runs on desktop and in the browser. Still to come: an MCP server.
+of recorded values over time, timelines of text parameters, entity timelines (when each entity lived and logged), and dockable panels (several graphs and timelines views, panels can move to their own windows). It runs on desktop and in the browser. There is also an [MCP server](docs/mcp.md) so AI assistants can read and analyse captures.
 
 ## Try it
 
@@ -26,6 +26,7 @@ of recorded values over time, timelines of text parameters, entity timelines (wh
 cargo run -p vrd -- testdata/sample.vrd          # desktop
 cd apps/vrd-web && trunk serve                   # browser; open /?url=sample.vrd
 cargo run -p vrd-cli -- info testdata/sample.vrd # inspect a capture
+cargo run -p vrd-cli -- mcp                           # MCP server over stdio (see docs/mcp.md)
 cargo run -p vrd-cli -- render testdata/sample.vrd --out frame.png --frame 600   # draw a frame to a PNG
 ```
 

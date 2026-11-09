@@ -20,6 +20,7 @@ vrd-render = { version = "0.1.0", path = "../../crates/render" }
 pollster = "1.0.1"
 png = "0.18.1"
 wgpu = { version = "27", default-features = false, features = ["wgsl", "dx12", "vulkan", "metal"] }
+serde_json = "1.0.154"
 
 [lints]
 workspace = true
